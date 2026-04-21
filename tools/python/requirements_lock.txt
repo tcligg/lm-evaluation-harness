@@ -1,0 +1,12 @@
+# Placeholder lock file. Regenerate with:
+#   pip-compile tools/python/requirements.in -o tools/python/requirements_lock.txt
+#
+# Listed without hashes so devs can iterate on the host venv before CI gates
+# the hash-pinned variant. Phase 2 (CI) will replace this with a hashed lock.
+typer==0.12.5
+pyyaml==6.0.2
+protobuf==5.28.2
+google-cloud-storage==2.18.2
+google-cloud-bigquery==3.25.0
+google-auth==2.35.0
+click==8.1.7

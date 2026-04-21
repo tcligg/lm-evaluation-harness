@@ -1,0 +1,64 @@
+// EvalConfig is the user-facing run specification.
+//
+// Authored as YAML, parsed via google.protobuf.json_format.ParseDict.
+// This is the primary input to `evalctl run`.
+syntax = "proto3";
+
+package eval.v1;
+
+import "google/protobuf/struct.proto";
+import "proto/eval/v1/common.proto";
+
+message EvalConfig {
+  // Bumped on breaking changes. Runner asserts compatibility on load.
+  int32 schema_version = 1;
+
+  RunMeta run = 2;
+  HarnessSpec harness = 3;
+  Endpoint endpoint = 4;
+  repeated TaskSpec tasks = 5;
+  ModelArgs model_args = 6;
+  SamplingParams sampling_params = 7;
+
+  // Free-form pass-through to lm_eval --gen_kwargs (e.g. {"until": "<|eos|>"}).
+  // Kept as Struct because the harness accepts arbitrary string-valued kwargs.
+  google.protobuf.Struct gen_kwargs = 8;
+
+  // Identifier resolved against tools/evalctl/templates/.
+  string prompt_template = 9;
+
+  // Multi-seed runs supported (matches harness --seed N,N,N,N convention).
+  repeated int32 seed = 10;
+
+  Limits limits = 11;
+  OutputSinks output = 12;
+}
+
+message RunMeta {
+  // Human-readable name; not unique. Run uniqueness comes from the manifest UUID.
+  string name = 1;
+  // Free-form labels surfaced in BigQuery as a JSON column.
+  map<string, string> tags = 2;
+}
+
+message HarnessSpec {
+  // Pinned harness version, e.g. "0.4.2". Must match the vendored harness in
+  // the container image; runner aborts on mismatch.
+  string version = 1;
+}
+
+message TaskSpec {
+  string name = 1;          // e.g. "gpqa_diamond_generative_n_shot"
+  int32 num_fewshot = 2;
+  repeated string metrics = 3;  // e.g. ["exact_match"]
+}
+
+message Limits {
+  // 0 means "unlimited"; any positive value caps docs per task (smoke tests).
+  int32 per_task = 1;
+}
+
+message OutputSinks {
+  string gcs_bucket = 1;    // e.g. "gs://eval-artifacts-prod"
+  string bq_dataset = 2;    // e.g. "eval_results"
+}

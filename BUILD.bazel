@@ -1,0 +1,6 @@
+# Root BUILD file. Intentionally minimal; targets live in subpackages.
+exports_files([
+    "MODULE.bazel",
+    ".bazelrc",
+    ".bazelversion",
+])

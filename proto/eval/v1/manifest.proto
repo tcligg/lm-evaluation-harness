@@ -1,0 +1,69 @@
+// RunManifest is the auto-generated provenance record for every eval run.
+//
+// Emitted by evalctl, mutated by eval_runner (status transitions),
+// serialized to GCS as proto3 JSON (filename: manifest.json).
+syntax = "proto3";
+
+package eval.v1;
+
+import "google/protobuf/timestamp.proto";
+
+enum ExecutionMode {
+  EXECUTION_MODE_UNSPECIFIED = 0;
+  EXECUTION_MODE_LOCAL = 1;
+  EXECUTION_MODE_REMOTE = 2;
+}
+
+enum RunStatus {
+  RUN_STATUS_UNSPECIFIED = 0;
+  RUN_STATUS_RUNNING = 1;
+  RUN_STATUS_SUCCESS = 2;
+  RUN_STATUS_FAILED = 3;
+  RUN_STATUS_PARTIAL = 4;
+}
+
+message RunManifest {
+  string run_id = 1;            // uuid4, the join key for everything
+  int32 schema_version = 2;
+  string name = 3;              // mirrors EvalConfig.run.name
+  string user_id = 4;           // os.getenv("USER") or LOGNAME
+  google.protobuf.Timestamp timestamp_utc = 5;
+  ExecutionMode execution_mode = 6;
+
+  GitInfo git = 7;
+  ContainerInfo container = 8;
+  EndpointRef endpoint = 11;
+
+  // Allow-listed env vars only. NEVER include secrets here.
+  map<string, string> env_allow_listed = 9;
+
+  // SHA-256 of the resolved config.yaml bytes; lets us detect drift.
+  string config_sha256 = 10;
+
+  // Mirrors EvalConfig.run.tags for query convenience.
+  map<string, string> tags = 12;
+
+  RunStatus status = 13;
+
+  // Vertex Custom Job resource name (remote runs only).
+  string vertex_job_id = 14;
+}
+
+message GitInfo {
+  string wrapper_commit = 1;    // commit of this repo at run-submit time
+  bool wrapper_dirty = 2;
+  string harness_version = 3;   // mirrors EvalConfig.harness.version
+  string harness_commit = 4;    // commit of the vendored harness
+}
+
+message ContainerInfo {
+  string image = 1;             // e.g. "us-docker.pkg.dev/.../eval-harness:0.4.2-abc123"
+  string digest = 2;            // sha256:... pinned at submit time
+}
+
+message EndpointRef {
+  // Denormalized from EvalConfig.endpoint for easy BQ joins.
+  string type = 1;              // string form of EndpointType for human-readability
+  string model_id = 2;
+  string endpoint_id = 3;
+}

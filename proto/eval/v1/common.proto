@@ -1,0 +1,59 @@
+// Common message types shared across config, manifest, and metrics protos.
+//
+// Versioned under eval.v1. Changes here ripple to every consumer; favor
+// adding new fields over modifying existing ones, and `reserved` removed
+// field numbers/names indefinitely.
+syntax = "proto3";
+
+package eval.v1;
+
+// EndpointType enumerates supported model-serving backends.
+//
+// vertex_chat: Vertex AI endpoint reached via OpenAI-compatible chat shim.
+// local_chat:  any OpenAI-compatible /v1/chat/completions endpoint on localhost.
+// local_vllm:  vLLM /v1/completions endpoint on localhost.
+// hf:          local HuggingFace transformers (weights mounted into container).
+enum EndpointType {
+  ENDPOINT_TYPE_UNSPECIFIED = 0;
+  ENDPOINT_TYPE_VERTEX_CHAT = 1;
+  ENDPOINT_TYPE_LOCAL_CHAT = 2;
+  ENDPOINT_TYPE_LOCAL_VLLM = 3;
+  ENDPOINT_TYPE_HF = 4;
+}
+
+// AuthMode controls how the runner obtains credentials for the endpoint.
+enum AuthMode {
+  AUTH_MODE_UNSPECIFIED = 0;
+  AUTH_MODE_GCLOUD_ADC = 1;   // Application Default Credentials (preferred).
+  AUTH_MODE_STATIC_TOKEN = 2; // Token sourced from EVALCTL_STATIC_TOKEN env var.
+  AUTH_MODE_NONE = 3;         // No auth (local self-hosted endpoints).
+}
+
+// Endpoint describes the model server to evaluate.
+message Endpoint {
+  EndpointType type = 1;
+  string model_id = 2;       // e.g. "google/openmaas-2.0-test"
+  string endpoint_id = 3;    // e.g. "projects/.../endpoints/123" (vertex only)
+  string base_url = 4;       // explicit override; auto-derived for vertex_chat
+  AuthSpec auth = 5;
+}
+
+message AuthSpec {
+  AuthMode mode = 1;
+}
+
+// ModelArgs are passed through to the lm_eval model adapter (e.g.
+// local-chat-completions). Field names match the harness's existing keys.
+message ModelArgs {
+  int32 num_concurrent = 1;
+  int32 max_gen_toks = 2;
+  int32 timeout = 3;
+}
+
+// SamplingParams control generation behavior. Distinct from gen_kwargs so
+// the common-case knobs are typed and validated.
+message SamplingParams {
+  double temperature = 1;
+  double top_p = 2;
+  int32 max_tokens = 3;
+}
