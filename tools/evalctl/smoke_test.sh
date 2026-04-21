@@ -105,6 +105,12 @@ if "--log_samples" not in argv:
     failures.append("--log_samples missing")
 if at("--include_path") != expected["include_path"]:
     failures.append(f"--include_path: got {at('--include_path')!r}")
+# Required for chat endpoints; without it the harness fails with
+# "expects messages as list[dict]".
+if "--apply_chat_template" not in argv:
+    failures.append("--apply_chat_template missing (chat endpoint)")
+if "--fewshot_as_multiturn" not in argv:
+    failures.append("--fewshot_as_multiturn missing (chat endpoint)")
 
 if failures:
     print("FAILED:")

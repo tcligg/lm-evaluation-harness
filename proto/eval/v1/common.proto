@@ -57,3 +57,24 @@ message SamplingParams {
   double top_p = 2;
   int32 max_tokens = 3;
 }
+
+// ChatTemplate controls the harness's --apply_chat_template /
+// --fewshot_as_multiturn flags. Required for chat endpoints
+// (vertex_chat, local_chat); ignored for completions endpoints
+// (local_vllm) and HF.
+//
+// Tri-state via the `mode` enum so we can distinguish "user didn't say"
+// from "user said no" (proto3 booleans can't).
+message ChatTemplate {
+  enum Mode {
+    MODE_UNSPECIFIED = 0;     // runner auto-decides based on endpoint type
+    MODE_DISABLED = 1;        // do NOT pass --apply_chat_template
+    MODE_AUTO = 2;            // pass --apply_chat_template (model's default)
+    MODE_NAMED = 3;           // pass --apply_chat_template <name>
+  }
+  Mode mode = 1;
+  string template_name = 2;   // only used when mode = MODE_NAMED
+  // If true, also pass --fewshot_as_multiturn. Only meaningful when
+  // mode != MODE_DISABLED. Defaults to true when chat templating is on.
+  bool fewshot_as_multiturn = 3;
+}

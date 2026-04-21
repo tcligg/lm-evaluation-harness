@@ -113,6 +113,41 @@ ENDPOINT_TO_ADAPTER: dict[str, str] = {
     "hf": "hf",
 }
 
+# Endpoints that require chat-template wrapping by default. Other
+# endpoints (local_vllm, hf) speak the completions protocol and must
+# NOT have --apply_chat_template added.
+_CHAT_TEMPLATE_REQUIRED: frozenset[str] = frozenset({"vertex_chat", "local_chat"})
+
+
+def resolve_chat_template(
+    cfg: Mapping[str, Any],
+) -> tuple[bool, str | None, bool]:
+    """Decide whether to pass --apply_chat_template (and --fewshot_as_multiturn).
+
+    Returns (apply, template_name_or_None, fewshot_as_multiturn).
+
+    Defaulting rules (when cfg.chat_template is unset or mode unspecified):
+      - chat endpoints  -> apply=True, template=None, multiturn=True
+      - other endpoints -> apply=False
+    Explicit user values override the defaults.
+    """
+    endpoint_type = cfg.get("endpoint", {}).get("type")
+    chat = cfg.get("chat_template") or {}
+    mode = chat.get("mode", "MODE_UNSPECIFIED")
+
+    if mode == "MODE_DISABLED":
+        return (False, None, False)
+    if mode == "MODE_AUTO":
+        return (True, None, bool(chat.get("fewshot_as_multiturn", True)))
+    if mode == "MODE_NAMED":
+        name = chat.get("template_name") or None
+        return (True, name, bool(chat.get("fewshot_as_multiturn", True)))
+
+    # MODE_UNSPECIFIED -> decide by endpoint.
+    if endpoint_type in _CHAT_TEMPLATE_REQUIRED:
+        return (True, None, True)
+    return (False, None, False)
+
 
 def build_lm_eval_argv(cfg: Mapping[str, Any], *, output_path: str) -> list[str]:
     """Translate a (validated) config dict into an `lm_eval` argv.
@@ -152,6 +187,19 @@ def build_lm_eval_argv(cfg: Mapping[str, Any], *, output_path: str) -> list[str]
         "--log_samples",
         "--include_path", "custom_tasks",
     ]
+
+    # Chat-template handling. lm_eval's local-chat-completions adapter
+    # requires --apply_chat_template; without it, requests fail with
+    # "expects messages as list[dict]". The team's reference invocation
+    # implicitly relied on the harness's `fewshot_as_multiturn=True`
+    # default which itself requires --apply_chat_template.
+    apply_ct, template_name, multiturn = resolve_chat_template(cfg)
+    if apply_ct:
+        argv.append("--apply_chat_template")
+        if template_name:
+            argv.append(template_name)
+        if multiturn:
+            argv.append("--fewshot_as_multiturn")
 
     # Phase 0 limitation: lm_eval CLI takes a single --num_fewshot. We
     # honor tasks[0]; Phase 1 switches to programmatic invocation.

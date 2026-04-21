@@ -26,6 +26,7 @@ from tools.evalctl._pure import (
     filter_env,
     load_yaml_with_sha,
     normalize_enums,
+    resolve_chat_template,
 )
 
 
@@ -219,6 +220,94 @@ class LmEvalArgvTest(unittest.TestCase):
         endpoint_types = ENUM_NORMALIZATIONS[("endpoint", "type")].keys()
         for t in endpoint_types:
             self.assertIn(t, ENDPOINT_TO_ADAPTER, f"{t!r} missing from adapter table")
+
+
+class ChatTemplateTest(unittest.TestCase):
+    """Verifies the chat-template defaulting that prevents lm_eval's
+    'expects messages as list[dict]' assertion on chat endpoints."""
+
+    def test_chat_endpoint_defaults_on(self) -> None:
+        cfg = {"endpoint": {"type": "vertex_chat"}}
+        apply, name, multi = resolve_chat_template(cfg)
+        self.assertTrue(apply)
+        self.assertIsNone(name)
+        self.assertTrue(multi)
+
+    def test_local_chat_defaults_on(self) -> None:
+        cfg = {"endpoint": {"type": "local_chat"}}
+        apply, _, multi = resolve_chat_template(cfg)
+        self.assertTrue(apply)
+        self.assertTrue(multi)
+
+    def test_completions_endpoint_defaults_off(self) -> None:
+        for et in ("local_vllm", "hf"):
+            with self.subTest(endpoint=et):
+                cfg = {"endpoint": {"type": et}}
+                apply, _, multi = resolve_chat_template(cfg)
+                self.assertFalse(apply)
+                self.assertFalse(multi)
+
+    def test_explicit_disabled_overrides_chat_default(self) -> None:
+        cfg = {
+            "endpoint": {"type": "vertex_chat"},
+            "chat_template": {"mode": "MODE_DISABLED"},
+        }
+        apply, _, _ = resolve_chat_template(cfg)
+        self.assertFalse(apply)
+
+    def test_explicit_named_template(self) -> None:
+        cfg = {
+            "endpoint": {"type": "local_vllm"},
+            "chat_template": {"mode": "MODE_NAMED", "template_name": "llama3"},
+        }
+        apply, name, _ = resolve_chat_template(cfg)
+        self.assertTrue(apply)
+        self.assertEqual(name, "llama3")
+
+    def test_argv_includes_apply_chat_template_for_vertex(self) -> None:
+        cfg = {
+            "endpoint": {
+                "type": "vertex_chat",
+                "model_id": "x",
+                "base_url": "https://example.com",
+            },
+            "tasks": [{"name": "t"}],
+        }
+        argv = build_lm_eval_argv(cfg, output_path="/tmp")
+        self.assertIn("--apply_chat_template", argv)
+        self.assertIn("--fewshot_as_multiturn", argv)
+
+    def test_argv_omits_chat_template_for_completions(self) -> None:
+        cfg = {
+            "endpoint": {
+                "type": "local_vllm",
+                "model_id": "x",
+                "base_url": "http://localhost:8000/v1",
+            },
+            "tasks": [{"name": "t"}],
+        }
+        argv = build_lm_eval_argv(cfg, output_path="/tmp")
+        self.assertNotIn("--apply_chat_template", argv)
+        self.assertNotIn("--fewshot_as_multiturn", argv)
+
+    def test_argv_named_template_includes_name(self) -> None:
+        cfg = {
+            "endpoint": {
+                "type": "local_chat",
+                "model_id": "x",
+                "base_url": "http://localhost:8000/v1",
+            },
+            "tasks": [{"name": "t"}],
+            "chat_template": {
+                "mode": "MODE_NAMED",
+                "template_name": "llama3",
+                "fewshot_as_multiturn": False,
+            },
+        }
+        argv = build_lm_eval_argv(cfg, output_path="/tmp")
+        idx = argv.index("--apply_chat_template")
+        self.assertEqual(argv[idx + 1], "llama3")
+        self.assertNotIn("--fewshot_as_multiturn", argv)
 
 
 class IntegrationYamlToArgvTest(unittest.TestCase):

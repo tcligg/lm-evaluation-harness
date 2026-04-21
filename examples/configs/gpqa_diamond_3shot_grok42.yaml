@@ -50,6 +50,14 @@ seed: [0, 1234, 1234, 1234]
 limits:
   per_task: 0   # 0 = unlimited
 
+# Required for chat endpoints. Without --apply_chat_template, lm_eval's
+# local-chat-completions adapter raises:
+#   "LocalChatCompletion expects messages as list[dict]"
+# Defaults to AUTO when omitted; we set it explicitly here for clarity.
+chat_template:
+  mode: MODE_AUTO
+  fewshot_as_multiturn: true
+
 output:
   gcs_bucket: "gs://eval-artifacts-prod"
   bq_dataset: "eval_results"

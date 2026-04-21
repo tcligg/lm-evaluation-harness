@@ -32,6 +32,12 @@ message EvalConfig {
 
   Limits limits = 11;
   OutputSinks output = 12;
+
+  // Chat-template behavior. If unset, the runner defaults to AUTO for chat
+  // endpoints (vertex_chat, local_chat) and DISABLED for completion endpoints
+  // (local_vllm, hf). Required for chat endpoints to avoid the
+  // "expects messages as list[dict]" assertion.
+  ChatTemplate chat_template = 13;
 }
 
 message RunMeta {

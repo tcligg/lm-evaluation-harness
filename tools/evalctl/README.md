@@ -21,13 +21,46 @@ Not yet implemented (later phases):
 - Vertex Custom Job dispatch (Phase 5).
 - `evalctl show` / `evalctl compare` (require Phase 3).
 
+### Pre-requisites for an actual `--local` run against a Vertex endpoint
+
+Phase 0 dispatches `lm_eval` but doesn't yet handle auth. To actually
+hit a Vertex chat-completions endpoint:
+
+1. **Replace `REPLACE_ME` in your config** with the real endpoint resource
+   ID (look in Vertex AI console → Endpoints).
+
+2. **Export an OAuth bearer token** that `lm_eval`'s `local-chat-completions`
+   adapter can use. The team's existing pattern:
+
+   ```bash
+   ./refresh_token.sh &              # background loop, refreshes /tmp/gcloud_token.txt
+   export OPENAI_API_KEY="$(cat /tmp/gcloud_token.txt)"
+   evalctl run examples/configs/<your-config>.yaml --local
+   ```
+
+   This is intentionally manual until Phase 4 wires up ADC-based token
+   exchange. If `OPENAI_API_KEY` is empty the harness retries with
+   `Authorization: Bearer ` (empty) and gets 401s.
+
+3. **Chat endpoints require `chat_template`.** Configs targeting
+   `vertex_chat` or `local_chat` must enable chat templating (see the
+   `chat_template:` section in `examples/configs/gpqa_diamond_3shot_grok42.yaml`).
+   Without it, `lm_eval` raises:
+
+   ```
+   AssertionError: LocalChatCompletion expects messages as list[dict].
+   ```
+
+   `evalctl` defaults `chat_template.mode = AUTO` for chat endpoints, so
+   you only need to set this if you want to override.
+
 ## Testing
 
 There are two test tiers:
 
 | Tier | Command | Deps | Coverage |
 |---|---|---|---|
-| **Smoke** (no proto) | `make smoke` | python, PyYAML | env allow-list, YAML+sha256, enum normalization, lm_eval argv translation. 25 unit tests + an end-to-end YAML→argv check. |
+| **Smoke** (no proto) | `make smoke` | python, PyYAML | env allow-list, YAML+sha256, enum normalization, lm_eval argv translation, chat-template defaulting. 33 unit tests + an end-to-end YAML→argv check. |
 | **Full** (proto-coupled) | `make test` | bazel, protoc | Adds config_loader_test (proto roundtrip) and manifest_test (proto-typed RunManifest builder). |
 
 Run the smoke tier on any dev laptop without bazel/protoc:
@@ -134,7 +167,7 @@ tools/evalctl/
   config_loader.py   YAML -> EvalConfig (proto); delegates to _pure.
   manifest.py        Builds RunManifest (UUID, git, env allow-list).
   execution.py       EvalConfig -> lm_eval argv via _pure; runs locally.
-  pure_test.py       Proto-free unit tests (25 cases).
+  pure_test.py       Proto-free unit tests (33 cases).
   smoke_test.sh      4-step smoke driver (env, syntax, units, e2e).
 ```
 
