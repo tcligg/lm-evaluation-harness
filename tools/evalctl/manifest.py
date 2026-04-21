@@ -18,19 +18,7 @@ from pathlib import Path
 from google.protobuf import timestamp_pb2
 
 from proto.eval.v1 import config_pb2, manifest_pb2
-
-# Whitelist of env vars considered safe to capture. Bias toward the minimum
-# useful for reproducing a run; do NOT add anything that might hold a token.
-ENV_ALLOW_LIST: frozenset[str] = frozenset({
-    "USER",
-    "LOGNAME",
-    "HOSTNAME",
-    "EVALCTL_VERTEX_PROJECT",
-    "EVALCTL_VERTEX_REGION",
-    "EVALCTL_OVERRIDE_BASE_URL",
-    "VLLM_HOST",
-    "HF_HOME",
-})
+from tools.evalctl._pure import ENV_ALLOW_LIST, filter_env  # noqa: F401 (re-exported)
 
 
 def build_manifest(
@@ -67,16 +55,12 @@ def build_manifest(
     manifest.container.digest = image_digest
     manifest.endpoint.CopyFrom(_endpoint_ref_from_config(cfg))
 
-    for k, v in _filter_env(os.environ).items():
+    for k, v in filter_env(os.environ).items():
         manifest.env_allow_listed[k] = v
     for k, v in cfg.run.tags.items():
         manifest.tags[k] = v
 
     return manifest
-
-
-def _filter_env(env: dict[str, str] | os._Environ) -> dict[str, str]:
-    return {k: v for k, v in env.items() if k in ENV_ALLOW_LIST}
 
 
 def _endpoint_ref_from_config(cfg: config_pb2.EvalConfig) -> manifest_pb2.EndpointRef:

@@ -1,13 +1,18 @@
 # Convenience shims around bazel for devs unfamiliar with it.
 # Real build/test/run still goes through bazel; these are just aliases.
 
-.PHONY: build test evalctl proto clean dev-install fmt
+.PHONY: build test smoke evalctl proto clean dev-install fmt
 
 build:
 	bazel build //...
 
 test:
 	bazel test //...
+
+# Proto-free smoke test. Runs in any python venv with PyYAML; no bazel/protoc
+# needed. Use this for quick local validation before pushing.
+smoke:
+	./tools/evalctl/smoke_test.sh
 
 # Run the CLI under bazel (forwards CLI args via `make evalctl ARGS="..."`).
 evalctl:

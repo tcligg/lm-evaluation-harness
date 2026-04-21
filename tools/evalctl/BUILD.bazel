@@ -3,16 +3,29 @@ load("@pypi//:requirements.bzl", "requirement")
 
 package(default_visibility = ["//visibility:private"])
 
+# Proto-free helpers. Split out so they can be tested without depending on
+# protoc/bazel codegen being available (see tools/evalctl/smoke_test.sh).
+py_library(
+    name = "pure_lib",
+    srcs = [
+        "__init__.py",
+        "_pure.py",
+    ],
+    deps = [
+        requirement("pyyaml"),
+    ],
+)
+
 py_library(
     name = "evalctl_lib",
     srcs = [
-        "__init__.py",
         "cli.py",
         "config_loader.py",
         "manifest.py",
         "execution.py",
     ],
     deps = [
+        ":pure_lib",
         "//proto/eval/v1:eval_py_proto",
         requirement("typer"),
         requirement("pyyaml"),
@@ -27,6 +40,15 @@ py_binary(
     deps = [":evalctl_lib"],
 )
 
+# Proto-free tests. Runnable on any host with PyYAML.
+py_test(
+    name = "pure_test",
+    srcs = ["pure_test.py"],
+    data = ["//examples/configs:gpqa_diamond_3shot_grok42.yaml"],
+    deps = [":pure_lib"],
+)
+
+# Proto-coupled tests. Require py_proto_library to be built.
 py_test(
     name = "config_loader_test",
     srcs = ["config_loader_test.py"],
