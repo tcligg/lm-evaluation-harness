@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# evalctl launcher script.
+#
+# Resolves the repo root from $EVALCTL_REPO (set by `make install`) or
+# falls back to the script's own location, then execs python -m on the
+# tools.evalctl package.
+#
+# This is intentionally a thin shell wrapper rather than a setuptools
+# console_script so we can stay decoupled from the upstream
+# lm-evaluation-harness pyproject.toml.
+set -euo pipefail
+
+if [[ -n "${EVALCTL_REPO:-}" ]]; then
+  REPO="$EVALCTL_REPO"
+else
+  # Resolve symlinks so `~/.local/bin/evalctl -> .../tools/evalctl/evalctl`
+  # still finds the repo root.
+  SCRIPT="$(readlink -f "${BASH_SOURCE[0]}")"
+  REPO="$(cd "$(dirname "$SCRIPT")/../.." && pwd)"
+fi
+
+if [[ ! -d "$REPO/tools/evalctl" ]]; then
+  echo "evalctl: cannot find tools/evalctl/ under EVALCTL_REPO=$REPO" >&2
+  echo "         Set EVALCTL_REPO=/path/to/lm-evaluation-harness or reinstall." >&2
+  exit 2
+fi
+
+cd "$REPO"
+exec python -m tools.evalctl "$@"

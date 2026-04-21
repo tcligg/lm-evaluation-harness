@@ -55,6 +55,47 @@ without waiting on CI for every YAML edit. The `_pure.py` module is the
 single source of truth for argv translation and security-critical helpers
 (env allow-list); the proto-coupled modules call into it.
 
+## Install
+
+For everyday use, install the launcher onto your `PATH`:
+
+```
+make install                       # symlinks $HOME/.local/bin/evalctl -> this checkout
+make install PREFIX=/some/where    # alt prefix; binary at $PREFIX/bin/evalctl
+make uninstall                     # remove the launcher
+```
+
+If `~/.local/bin` isn't on your `$PATH`, add it (e.g. in `~/.bashrc`):
+
+```
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+The launcher hard-codes `EVALCTL_REPO=<this checkout>`, so `evalctl ...`
+works from any cwd. Pulling in this repo only updates the source; no
+re-install needed.
+
+### Proto / no-proto modes
+
+`evalctl` runs in two modes depending on whether the generated protobuf
+modules are importable:
+
+- **Proto mode** (preferred): `protoc`-generated `proto.eval.v1._pb2`
+  modules are on the import path (typically via `bazel run` or after
+  `make proto`). Strict proto3 field-name validation, full BQ/manifest
+  schema parity. This is what CI runs.
+- **Pure-Python fallback**: triggered automatically when `protobuf` or
+  the generated modules aren't importable. Same on-the-wire behavior
+  (manifest layout, lm_eval argv) but **field-name typos won't be
+  caught**. Useful on dev laptops behind Corp Airlock.
+
+You'll see a yellow note at the top of the output when the fallback
+kicks in:
+
+```
+Note: protobuf not importable (...); using pure-Python fallback.
+```
+
 ## Build
 
 ```
@@ -65,24 +106,31 @@ make smoke    # proto-free smoke check (no bazel needed)
 
 ## Run
 
+After `make install`:
+
+```
+evalctl validate examples/configs/gpqa_diamond_3shot_grok42.yaml
+evalctl run examples/configs/gpqa_diamond_3shot_grok42.yaml --local --dry-run
+evalctl run examples/configs/gpqa_diamond_3shot_grok42.yaml --local
+```
+
+Without install:
+
 ```
 make evalctl ARGS="validate examples/configs/gpqa_diamond_3shot_grok42.yaml"
-make evalctl ARGS="run examples/configs/gpqa_diamond_3shot_grok42.yaml --local --dry-run"
-```
-
-Or directly:
-
-```
 bazel run //tools/evalctl:evalctl -- run path/to/config.yaml --local --dry-run
+python -m tools.evalctl run path/to/config.yaml --local --dry-run
 ```
 
 ## Layout
 
 ```
 tools/evalctl/
+  evalctl            Bash launcher script (installed to $PREFIX/bin).
   _pure.py           Proto-free helpers (env allow-list, YAML loader,
                      enum normalization, lm_eval argv translation).
-  cli.py             Typer entry, subcommands.
+  cli.py             Typer entry, subcommands. Lazy proto imports with
+                     pure-Python fallback when proto isn't available.
   config_loader.py   YAML -> EvalConfig (proto); delegates to _pure.
   manifest.py        Builds RunManifest (UUID, git, env allow-list).
   execution.py       EvalConfig -> lm_eval argv via _pure; runs locally.
