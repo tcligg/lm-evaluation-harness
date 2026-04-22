@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Phase 0 smoke test for evalctl.
+# Phase 0 + Phase 1 smoke test for evalctl.
 #
-# Runs the proto-free unit suite + a hand-rolled YAML-to-argv check.
+# Runs the proto-free unit suite (pure_test, repro_test, programmatic_test)
+# plus an end-to-end YAML-to-argv check + a results-roundtrip check.
 # Designed to work on a developer laptop with stdlib + PyYAML only — no
 # protoc, no bazel, no network access. CI (Phase 2) runs the full
 # `bazel test //...` suite, including the proto-coupled tests.
@@ -23,7 +24,7 @@ green() { printf '\033[32m%s\033[0m\n' "$*"; }
 blue()  { printf '\033[34m%s\033[0m\n' "$*"; }
 
 # ---------- 1. Environment check ---------------------------------------------
-blue "[1/4] Environment check"
+blue "[1/5] Environment check"
 if ! command -v python >/dev/null 2>&1; then
   red "python not on PATH"; exit 2
 fi
@@ -36,7 +37,7 @@ green "  python: $(python --version 2>&1)"
 green "  PyYAML: $(python -c 'import yaml; print(yaml.__version__)')"
 
 # ---------- 2. Syntax check --------------------------------------------------
-blue "[2/4] Syntax check (py_compile)"
+blue "[2/5] Syntax check (py_compile)"
 python -m py_compile \
   tools/evalctl/__init__.py \
   tools/evalctl/__main__.py \
@@ -44,18 +45,23 @@ python -m py_compile \
   tools/evalctl/cli.py \
   tools/evalctl/config_loader.py \
   tools/evalctl/execution.py \
-  tools/evalctl/manifest.py
+  tools/evalctl/manifest.py \
+  tools/evalctl/programmatic.py \
+  tools/evalctl/repro.py
 green "  all evalctl modules compile cleanly"
 
 # ---------- 3. Proto-free unit suite -----------------------------------------
-blue "[3/4] Proto-free unit tests (tools/evalctl/pure_test.py)"
-if ! python -m unittest tools.evalctl.pure_test 2>&1; then
+blue "[3/5] Proto-free unit tests (pure_test, repro_test, programmatic_test)"
+if ! python -m unittest \
+  tools.evalctl.pure_test \
+  tools.evalctl.repro_test \
+  tools.evalctl.programmatic_test 2>&1; then
   red "unit tests FAILED"; exit 1
 fi
 green "  all proto-free tests pass"
 
 # ---------- 4. End-to-end YAML -> argv translation ---------------------------
-blue "[4/4] End-to-end: example YAML -> lm_eval argv"
+blue "[4/5] End-to-end: example YAML -> lm_eval argv"
 python - <<'PY'
 import sys
 from pathlib import Path
@@ -126,6 +132,66 @@ print(f"  argv:          {' '.join(argv)}")
 PY
 
 green "  YAML -> argv translation OK"
+
+# ---------- 5. Phase 1 round-trip: results.json -> config -> validate ---------
+blue "[5/5] Phase 1: results.json -> repro -> validate roundtrip"
+python - <<'PY'
+import json, sys, tempfile
+from pathlib import Path
+
+from tools.evalctl.repro import reconstruct_config
+
+# Synthesize a minimal results_*.json (mirrors what the harness writes).
+fixture = {
+    "results": {"gpqa_diamond_generative_n_shot": {
+        "alias": "gpqa_diamond_generative_n_shot",
+        "exact_match,strict-match": 0.4242,
+    }},
+    "configs": {"gpqa_diamond_generative_n_shot": {
+        "task": "gpqa_diamond_generative_n_shot",
+        "num_fewshot": 3,
+        "metric_list": [{"metric": "exact_match"}],
+    }},
+    "n-samples": {"gpqa_diamond_generative_n_shot": {"original": 198, "effective": 198}},
+    "config": {
+        "model": "local-chat-completions",
+        "model_args": "model=google/openmaas-2.0-test,base_url=https://x.aiplatform.googleapis.com/v1/projects/1/locations/us/endpoints/foo/chat/completions,num_concurrent=32,max_gen_toks=131072,timeout=1800",
+        "gen_kwargs": {"until": "<|eos|>"},
+        "random_seed": 0, "numpy_random_seed": 1234,
+        "torch_random_seed": 1234, "fewshot_random_seed": 1234,
+        "apply_chat_template": True, "fewshot_as_multiturn": True,
+        "model_source": "local-chat-completions",
+    },
+    "lm_eval_version": "0.4.12.dev0",
+}
+
+with tempfile.TemporaryDirectory() as d:
+    rp = Path(d) / "results.json"
+    rp.write_text(json.dumps(fixture))
+    yaml_str = reconstruct_config(rp, run_name="smoke_repro")
+
+    cp = Path(d) / "reconstructed.yaml"
+    cp.write_text(yaml_str)
+
+    # The reconstructed YAML should pass the same semantic validation
+    # the CLI applies in the pure-fallback path.
+    sys.path.insert(0, ".")
+    from tools.evalctl._pure import load_yaml_with_sha
+    data, _ = load_yaml_with_sha(cp)
+
+    # Manual semantic checks (mirrors cli._basic_pure_validate_or_die).
+    assert data["schema_version"] == 1
+    assert data["run"]["name"] == "smoke_repro"
+    assert data["endpoint"]["type"] == "vertex_chat"
+    assert data["endpoint"]["model_id"] == "google/openmaas-2.0-test"
+    assert data["endpoint"]["endpoint_id"]
+    assert data["tasks"][0]["num_fewshot"] == 3
+    assert data["chat_template"]["mode"] == "MODE_AUTO"
+    print(f"  reconstructed YAML: {len(yaml_str.splitlines())} lines")
+    print(f"  endpoint_id:        {data['endpoint']['endpoint_id']}")
+PY
+
+green "  results.json roundtrip OK"
 
 echo
 green "All smoke checks passed."

@@ -79,6 +79,13 @@ def run(
                                  help="Validate + print the lm_eval command without executing."),
     workdir: Path | None = typer.Option(None, "--workdir",
                                         help="Override scratch dir (default: /tmp/run/<run_id>/)."),
+    programmatic: bool = typer.Option(
+        True, "--programmatic/--subprocess",
+        help="Phase 1: invoke lm_eval.simple_evaluate in-process (default). "
+             "--subprocess falls back to Phase 0's CLI shell-out."),
+    limit: int | None = typer.Option(
+        None, "--limit",
+        help="Cap docs per task. Phase 1 smoke-test convenience."),
 ) -> None:
     """Submit an eval run."""
     if not local and not dry_run:
@@ -89,9 +96,11 @@ def run(
         raise typer.Exit(code=1)
 
     if _PROTO_OK:
-        _run_with_proto(config, no_publish=no_publish, dry_run=dry_run, workdir=workdir)
+        _run_with_proto(config, no_publish=no_publish, dry_run=dry_run,
+                        workdir=workdir, programmatic=programmatic, limit=limit)
     else:
-        _run_pure(config, no_publish=no_publish, dry_run=dry_run, workdir=workdir)
+        _run_pure(config, no_publish=no_publish, dry_run=dry_run,
+                  workdir=workdir, programmatic=programmatic, limit=limit)
 
 
 @app.command()
@@ -141,13 +150,74 @@ def compare(run_id_a: str, run_id_b: str) -> None:
     raise typer.Exit(code=1)
 
 
+@app.command()
+def repro(
+    results: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True,
+                                   help="Path to a historical results_*.json"),
+    out: Path = typer.Option(..., "--out", "-o",
+                             help="Where to write the reconstructed config.yaml"),
+    name: str = typer.Option("reproduced_run", "--name",
+                             help="run.name for the new config"),
+) -> None:
+    """Reconstruct an EvalConfig from a historical results_*.json.
+
+    Phase 1: enables A/B reproducibility checks. Reads the harness's
+    captured `config` and per-task `configs` keys and emits a YAML
+    that, when re-run, should produce equivalent metric scores.
+    """
+    from tools.evalctl.repro import reconstruct_config
+
+    try:
+        cfg = reconstruct_config(results, run_name=name)
+    except Exception as e:
+        typer.secho(f"failed to reconstruct: {type(e).__name__}: {e}",
+                    fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1)
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(cfg)
+    typer.secho(f"Wrote {out} ({len(cfg.splitlines())} lines)",
+                fg=typer.colors.GREEN)
+
+
+@app.command()
+def diff(
+    a: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True,
+                             help="Reference results_*.json (the historical run)."),
+    b: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True,
+                             help="Candidate results_*.json (your new run)."),
+    score_tol: float = typer.Option(
+        0.0, "--score-tol",
+        help="Absolute tolerance for per-metric score deltas. 0 = exact."),
+    n_samples_tol: int = typer.Option(
+        0, "--n-samples-tol",
+        help="Allowed |delta| in n-samples per task. 0 = exact."),
+) -> None:
+    """Structural + numeric diff between two results_*.json files.
+
+    Exit codes:
+      0 - no significant drift
+      3 - drift detected (config, scores, or sample counts)
+    """
+    from tools.evalctl.repro import diff_results
+
+    report, drifted = diff_results(a, b, score_tol=score_tol,
+                                   n_samples_tol=n_samples_tol)
+    typer.echo(report)
+    if drifted:
+        typer.secho("DRIFT DETECTED", fg=typer.colors.RED)
+        raise typer.Exit(code=3)
+    typer.secho("MATCH", fg=typer.colors.GREEN)
+
+
 # ---------------------------------------------------------------------------
 # Proto path
 # ---------------------------------------------------------------------------
 
 
 def _run_with_proto(config: Path, *, no_publish: bool, dry_run: bool,
-                    workdir: Path | None) -> None:
+                    workdir: Path | None, programmatic: bool,
+                    limit: int | None) -> None:
     cfg, sha = _load_or_die_proto(config)
 
     manifest = build_manifest(
@@ -157,8 +227,26 @@ def _run_with_proto(config: Path, *, no_publish: bool, dry_run: bool,
     )
 
     run_dir = workdir or Path(tempfile.gettempdir()) / "run" / manifest.run_id
+
+    if programmatic:
+        # Convert to dict and route through the programmatic dispatcher.
+        from google.protobuf import json_format as _jf
+        cfg_dict = _jf.MessageToDict(cfg, preserving_proto_field_name=True,
+                                     use_integers_for_enums=False)
+        # Friendly enum form expected by the programmatic dispatcher.
+        if "endpoint" in cfg_dict and "type" in cfg_dict["endpoint"]:
+            cfg_dict["endpoint"]["type"] = (
+                cfg_dict["endpoint"]["type"].removeprefix("ENDPOINT_TYPE_").lower()
+            )
+        _execute_programmatic(cfg_dict, manifest_dict={
+            "run_id": manifest.run_id,
+            "name": manifest.name,
+        }, run_dir=run_dir, no_publish=no_publish, dry_run=dry_run, limit=limit,
+            mode_note="local (host-python, proto + programmatic)")
+        return
+
     _print_run_header(manifest.run_id, manifest.name, run_dir, no_publish,
-                      mode_note="local (host-python, proto)")
+                      mode_note="local (host-python, proto + subprocess)")
 
     rc = dispatch_local_host(cfg, manifest, workdir=run_dir, dry_run=dry_run)
     _exit_for_rc(rc, run_dir)
@@ -178,7 +266,8 @@ def _load_or_die_proto(path: Path):
 
 
 def _run_pure(config: Path, *, no_publish: bool, dry_run: bool,
-              workdir: Path | None) -> None:
+              workdir: Path | None, programmatic: bool,
+              limit: int | None) -> None:
     """Run without the generated proto modules.
 
     Trades proto3 strict validation for the ability to run on a box where
@@ -193,9 +282,6 @@ def _run_pure(config: Path, *, no_publish: bool, dry_run: bool,
 
     data, sha = load_yaml_with_sha(config)
     _basic_pure_validate_or_die(data, source=str(config))
-    # The pure argv builder expects the user-facing enum strings (vertex_chat),
-    # not the proto-name form (ENDPOINT_TYPE_VERTEX_CHAT). Skip normalize_enums
-    # here; it's only needed for the json_format.ParseDict call site.
 
     run_id = str(uuid.uuid4())
     run_dir = workdir or Path(tempfile.gettempdir()) / "run" / run_id
@@ -207,10 +293,19 @@ def _run_pure(config: Path, *, no_publish: bool, dry_run: bool,
     _write_manifest_pure(manifest, run_dir / "manifest.json")
     _write_resolved_config_pure(data, run_dir / "config.resolved.yaml")
 
+    if programmatic:
+        _execute_programmatic(data, manifest_dict={
+            "run_id": run_id, "name": manifest["name"],
+        }, run_dir=run_dir, no_publish=no_publish, dry_run=dry_run, limit=limit,
+            mode_note="local (host-python, pure + programmatic)")
+        return
+
     _print_run_header(run_id, manifest["name"], run_dir, no_publish,
-                      mode_note="local (host-python, pure fallback)")
+                      mode_note="local (host-python, pure + subprocess)")
 
     argv = build_lm_eval_argv(data, output_path=str(run_dir))
+    if limit:
+        argv += ["--limit", str(limit)]
 
     if dry_run:
         typer.echo("DRY RUN — would execute:")
@@ -223,6 +318,51 @@ def _run_pure(config: Path, *, no_publish: bool, dry_run: bool,
     with log_path.open("w") as log:
         proc = subprocess.run(argv, stdout=log, stderr=subprocess.STDOUT)
     _exit_for_rc(proc.returncode, run_dir)
+
+
+def _execute_programmatic(data: dict, *, manifest_dict: dict, run_dir: Path,
+                          no_publish: bool, dry_run: bool, limit: int | None,
+                          mode_note: str) -> None:
+    """Phase 1: in-process lm_eval.simple_evaluate dispatch.
+
+    Same artifact layout as the subprocess path; the difference is that
+    we get the EvalResults dict in process and write the canonical
+    results_*.json + samples_*.jsonl ourselves.
+    """
+    _print_run_header(manifest_dict["run_id"], manifest_dict["name"],
+                      run_dir, no_publish, mode_note=mode_note)
+    if limit:
+        typer.echo(f"limit:       {limit} docs/task (smoke mode)")
+
+    if dry_run:
+        typer.echo("DRY RUN — would call lm_eval.simple_evaluate(...) with:")
+        from tools.evalctl.programmatic import (
+            _build_model_args, _group_tasks_by_fewshot,
+        )
+        typer.echo(f"  model_args   = {_build_model_args(data)}")
+        typer.echo(f"  task_groups  = {_group_tasks_by_fewshot(data.get('tasks') or [])}")
+        typer.echo(f"  limit        = {limit}")
+        return
+
+    try:
+        from tools.evalctl.programmatic import run_programmatic
+    except ImportError as e:
+        typer.secho(f"lm_eval not importable: {e}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2)
+
+    typer.echo(f"Executing lm_eval.simple_evaluate (run_id={manifest_dict['run_id']}) ...")
+    try:
+        results = run_programmatic(data, workdir=run_dir, limit=limit)
+    except Exception as e:
+        typer.secho(f"lm_eval failed: {type(e).__name__}: {e}",
+                    fg=typer.colors.RED)
+        raise typer.Exit(code=2)
+
+    n_tasks = len(results.get("results", {}))
+    typer.secho(
+        f"Run complete: {n_tasks} task(s). Artifacts in {run_dir}",
+        fg=typer.colors.GREEN,
+    )
 
 
 def _basic_pure_validate_or_die(data: dict, *, source: str) -> None:

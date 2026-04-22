@@ -5,13 +5,30 @@ the full design.
 
 ## Status
 
-Phase 0 (skeleton). Supports:
+Phases 0 + 1 complete.
+
+**Phase 0 (skeleton):**
 
 - `evalctl validate <config.yaml>` — schema + semantic validation.
-- `evalctl run <config.yaml> --local --dry-run` — print the lm_eval command.
-- `evalctl run <config.yaml> --local` — execute via `lm_eval` in the current
-  Python env, write `manifest.json` + `config.resolved.yaml` + `runner.log`
-  + harness outputs to `/tmp/run/<run_id>/`.
+- `evalctl run <config.yaml> --local --dry-run` — print what would execute.
+- `evalctl run <config.yaml> --local --subprocess` — Phase 0's CLI shell-out.
+- Manifest, config.resolved.yaml, runner.log written to `/tmp/run/<run_id>/`.
+
+**Phase 1 (reproducibility):**
+
+- `evalctl run ... --local` (default) — programmatic in-process dispatch via
+  `lm_eval.simple_evaluate(...)`. Lifts the Phase 0 limitation around per-task
+  `num_fewshot` (each distinct value gets its own `simple_evaluate` call,
+  results merged).
+- `evalctl run ... --limit N` — cap docs per task (smoke convenience).
+- `evalctl repro <results_*.json> --out cfg.yaml` — reconstruct an evalctl
+  config from a historical harness output. Infers endpoint type/id from the
+  recorded `model_args`, preserves per-task `num_fewshot`, emits a
+  `chat_template:` block when needed.
+- `evalctl diff <a.json> <b.json> [--score-tol] [--n-samples-tol]` —
+  structural + numeric comparison of two `results_*.json` files. Exit 0 on
+  match, exit 3 on drift. Used to gate "this change doesn't perturb
+  historical sweeps."
 
 Not yet implemented (later phases):
 
@@ -54,13 +71,40 @@ hit a Vertex chat-completions endpoint:
    `evalctl` defaults `chat_template.mode = AUTO` for chat endpoints, so
    you only need to set this if you want to override.
 
+## Phase 1: Reproducibility procedure
+
+The intended workflow for validating that an `evalctl` config reproduces
+a historical sweep:
+
+```bash
+# 1. Reconstruct an evalctl config from the historical results.
+evalctl repro path/to/historical/results_2026-03-24.json \
+  --out /tmp/repro_cfg.yaml --name gpqa_repro
+
+# 2. Inspect / edit the reconstructed config (TODO comments highlight
+#    fields that don't round-trip, e.g. auth, gcs_bucket).
+$EDITOR /tmp/repro_cfg.yaml
+
+# 3. Re-run with --limit for a smoke test first, then full.
+evalctl run /tmp/repro_cfg.yaml --local --limit 10
+evalctl run /tmp/repro_cfg.yaml --local
+
+# 4. Diff the new results against the historical reference.
+evalctl diff path/to/historical/results_2026-03-24.json \
+             /tmp/run/<run_id>/results_*.json \
+             --score-tol 0.02 --n-samples-tol 0
+```
+
+Exit codes from `evalctl diff`: `0 = match`, `3 = drift`. Use this in CI
+to gate "do not perturb the historical sweeps" guarantees.
+
 ## Testing
 
 There are two test tiers:
 
 | Tier | Command | Deps | Coverage |
 |---|---|---|---|
-| **Smoke** (no proto) | `make smoke` | python, PyYAML | env allow-list, YAML+sha256, enum normalization, lm_eval argv translation, chat-template defaulting. 33 unit tests + an end-to-end YAML→argv check. |
+| **Smoke** (no proto) | `make smoke` | python, PyYAML | env allow-list, YAML+sha256, enum normalization, lm_eval argv translation, chat-template defaulting, results-roundtrip (Phase 1), programmatic dispatcher with mocked lm_eval. 63 unit tests + 2 end-to-end checks. |
 | **Full** (proto-coupled) | `make test` | bazel, protoc | Adds config_loader_test (proto roundtrip) and manifest_test (proto-typed RunManifest builder). |
 
 Run the smoke tier on any dev laptop without bazel/protoc:
@@ -159,16 +203,24 @@ python -m tools.evalctl run path/to/config.yaml --local --dry-run
 
 ```
 tools/evalctl/
-  evalctl            Bash launcher script (installed to $PREFIX/bin).
-  _pure.py           Proto-free helpers (env allow-list, YAML loader,
-                     enum normalization, lm_eval argv translation).
-  cli.py             Typer entry, subcommands. Lazy proto imports with
-                     pure-Python fallback when proto isn't available.
-  config_loader.py   YAML -> EvalConfig (proto); delegates to _pure.
-  manifest.py        Builds RunManifest (UUID, git, env allow-list).
-  execution.py       EvalConfig -> lm_eval argv via _pure; runs locally.
-  pure_test.py       Proto-free unit tests (33 cases).
-  smoke_test.sh      4-step smoke driver (env, syntax, units, e2e).
+  evalctl              Bash launcher script (installed to $PREFIX/bin).
+  _pure.py             Proto-free helpers (env allow-list, YAML loader,
+                       enum normalization, lm_eval argv translation,
+                       chat-template defaulting).
+  cli.py               Typer entry, subcommands. Lazy proto imports with
+                       pure-Python fallback when proto isn't available.
+  config_loader.py     YAML -> EvalConfig (proto); delegates to _pure.
+  manifest.py          Builds RunManifest (UUID, git, env allow-list).
+  execution.py         EvalConfig -> lm_eval argv via _pure; subprocess
+                       dispatch (Phase 0 fallback).
+  programmatic.py      Phase 1: in-process lm_eval.simple_evaluate dispatch.
+                       Per-task num_fewshot via call grouping.
+  repro.py             Phase 1: results.json -> EvalConfig and
+                       diff_results(a, b) for drift detection.
+  pure_test.py         Proto-free unit tests for _pure (33 cases).
+  repro_test.py        Proto-free unit tests for repro (20 cases).
+  programmatic_test.py Proto-free unit tests for programmatic (10 cases).
+  smoke_test.sh        5-step smoke driver (env, syntax, units, e2e, repro).
 ```
 
 Schema lives in `proto/eval/v1/`.

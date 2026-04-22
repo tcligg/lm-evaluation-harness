@@ -16,6 +16,19 @@ py_library(
     ],
 )
 
+# Phase 1: programmatic dispatcher + repro/diff. Proto-free; depends on
+# lm_eval at runtime via a lazy import (so unit tests can mock it).
+py_library(
+    name = "phase1_lib",
+    srcs = [
+        "programmatic.py",
+        "repro.py",
+    ],
+    deps = [
+        ":pure_lib",
+    ],
+)
+
 py_library(
     name = "evalctl_lib",
     srcs = [
@@ -25,6 +38,7 @@ py_library(
         "execution.py",
     ],
     deps = [
+        ":phase1_lib",
         ":pure_lib",
         "//proto/eval/v1:eval_py_proto",
         requirement("typer"),
@@ -46,6 +60,18 @@ py_test(
     srcs = ["pure_test.py"],
     data = ["//examples/configs:gpqa_diamond_3shot_grok42.yaml"],
     deps = [":pure_lib"],
+)
+
+py_test(
+    name = "repro_test",
+    srcs = ["repro_test.py"],
+    deps = [":phase1_lib"],
+)
+
+py_test(
+    name = "programmatic_test",
+    srcs = ["programmatic_test.py"],
+    deps = [":phase1_lib"],
 )
 
 # Proto-coupled tests. Require py_proto_library to be built.
