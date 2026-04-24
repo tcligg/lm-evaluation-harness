@@ -29,6 +29,15 @@ py_library(
     ],
 )
 
+# Phase 2: Docker container dispatcher. Proto-free, but depends only on
+# stdlib subprocess so we keep it as its own library to make it
+# unit-testable without dragging proto deps in.
+py_library(
+    name = "container_lib",
+    srcs = ["container.py"],
+    deps = [],
+)
+
 py_library(
     name = "evalctl_lib",
     srcs = [
@@ -38,6 +47,7 @@ py_library(
         "execution.py",
     ],
     deps = [
+        ":container_lib",
         ":phase1_lib",
         ":pure_lib",
         "//proto/eval/v1:eval_py_proto",
@@ -72,6 +82,12 @@ py_test(
     name = "programmatic_test",
     srcs = ["programmatic_test.py"],
     deps = [":phase1_lib"],
+)
+
+py_test(
+    name = "container_test",
+    srcs = ["container_test.py"],
+    deps = [":container_lib"],
 )
 
 # Proto-coupled tests. Require py_proto_library to be built.

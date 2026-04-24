@@ -17,7 +17,7 @@ from pathlib import Path
 
 from google.protobuf import timestamp_pb2
 
-from proto.eval.v1 import config_pb2, manifest_pb2
+from proto.eval.v1 import common_pb2, config_pb2, manifest_pb2
 from tools.evalctl._pure import ENV_ALLOW_LIST, filter_env  # noqa: F401 (re-exported)
 
 
@@ -32,8 +32,9 @@ def build_manifest(
 ) -> manifest_pb2.RunManifest:
     """Construct a RunManifest for a fresh run.
 
-    `image` and `image_digest` are blank for host-Python (Phase 0) runs;
-    they get populated once the docker dispatcher lands in Phase 2.
+    `image` and `image_digest` come from explicit args when a remote
+    dispatcher submits the run; otherwise we auto-detect from env vars
+    set by the docker image (Phase 2 onward).
     """
     now = datetime.now(timezone.utc)
     ts = timestamp_pb2.Timestamp()
@@ -51,8 +52,9 @@ def build_manifest(
     )
 
     manifest.git.CopyFrom(_collect_git_info(cfg.harness.version, repo_root))
-    manifest.container.image = image
-    manifest.container.digest = image_digest
+    auto_image, auto_digest = _detect_container_provenance()
+    manifest.container.image = image or auto_image
+    manifest.container.digest = image_digest or auto_digest
     manifest.endpoint.CopyFrom(_endpoint_ref_from_config(cfg))
 
     for k, v in filter_env(os.environ).items():
@@ -64,7 +66,9 @@ def build_manifest(
 
 
 def _endpoint_ref_from_config(cfg: config_pb2.EvalConfig) -> manifest_pb2.EndpointRef:
-    type_name = config_pb2.EndpointType.Name(cfg.endpoint.type)
+    # The EndpointType enum is defined in common.proto, so it lives on
+    # common_pb2. cfg.endpoint.type is a plain int.
+    type_name = common_pb2.EndpointType.Name(cfg.endpoint.type)
     # Strip "ENDPOINT_TYPE_" prefix for human-friendly storage.
     short = type_name.removeprefix("ENDPOINT_TYPE_").lower()
     return manifest_pb2.EndpointRef(
@@ -88,6 +92,19 @@ def _collect_git_info(harness_version: str, repo_root: Path | None) -> manifest_
     info.wrapper_dirty = _git(["status", "--porcelain"], cwd) != ""
     info.harness_commit = info.wrapper_commit  # vendored in same repo
     return info
+
+
+def _detect_container_provenance() -> tuple[str, str]:
+    """Read image + digest from env vars set by the Phase 2 Dockerfile.
+
+    Returns ("", "") on a host-Python run. The Dockerfile sets:
+      EVALCTL_IMAGE_REF       full registry/name:tag (optional)
+      EVALCTL_IMAGE_DIGEST    sha256:... (optional, set by CI on push)
+      EVALCTL_HARNESS_VERSION used as a sanity-check signal
+    """
+    image = os.getenv("EVALCTL_IMAGE_REF", "")
+    digest = os.getenv("EVALCTL_IMAGE_DIGEST", "")
+    return image, digest
 
 
 def _git(args: list[str], cwd: Path) -> str:

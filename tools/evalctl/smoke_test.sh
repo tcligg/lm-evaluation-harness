@@ -44,6 +44,7 @@ python -m py_compile \
   tools/evalctl/_pure.py \
   tools/evalctl/cli.py \
   tools/evalctl/config_loader.py \
+  tools/evalctl/container.py \
   tools/evalctl/execution.py \
   tools/evalctl/manifest.py \
   tools/evalctl/programmatic.py \
@@ -51,11 +52,12 @@ python -m py_compile \
 green "  all evalctl modules compile cleanly"
 
 # ---------- 3. Proto-free unit suite -----------------------------------------
-blue "[3/5] Proto-free unit tests (pure_test, repro_test, programmatic_test)"
+blue "[3/5] Proto-free unit tests (pure, repro, programmatic, container)"
 if ! python -m unittest \
   tools.evalctl.pure_test \
   tools.evalctl.repro_test \
-  tools.evalctl.programmatic_test 2>&1; then
+  tools.evalctl.programmatic_test \
+  tools.evalctl.container_test 2>&1; then
   red "unit tests FAILED"; exit 1
 fi
 green "  all proto-free tests pass"

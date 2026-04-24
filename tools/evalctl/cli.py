@@ -72,7 +72,7 @@ def run(
     config: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True,
                                   help="Path to config.yaml"),
     local: bool = typer.Option(False, "--local",
-                               help="Execute locally (Phase 0: host-Python only)."),
+                               help="Execute locally (Phase 0+: host-Python or container)."),
     no_publish: bool = typer.Option(False, "--no-publish",
                                     help="Skip GCS/BQ publish (no-op until Phase 3)."),
     dry_run: bool = typer.Option(False, "--dry-run",
@@ -86,14 +86,27 @@ def run(
     limit: int | None = typer.Option(
         None, "--limit",
         help="Cap docs per task. Phase 1 smoke-test convenience."),
+    container: bool = typer.Option(
+        False, "--container",
+        help="Phase 2: run inside the pinned eval-harness Docker image."),
+    image: str | None = typer.Option(
+        None, "--image",
+        help="Override container image ref. Default: $EVALCTL_IMAGE_REF "
+             "or local/eval-harness:latest."),
 ) -> None:
     """Submit an eval run."""
     if not local and not dry_run:
         typer.secho(
-            "Phase 0 supports --local only. Remote dispatch lands in Phase 5.",
+            "Phase 0/1/2 support --local only. Remote dispatch lands in Phase 5.",
             fg=typer.colors.YELLOW,
         )
         raise typer.Exit(code=1)
+
+    if container:
+        _run_in_container(config, workdir=workdir, image=image,
+                          dry_run=dry_run, programmatic=programmatic,
+                          limit=limit, no_publish=no_publish)
+        return
 
     if _PROTO_OK:
         _run_with_proto(config, no_publish=no_publish, dry_run=dry_run,
@@ -101,6 +114,46 @@ def run(
     else:
         _run_pure(config, no_publish=no_publish, dry_run=dry_run,
                   workdir=workdir, programmatic=programmatic, limit=limit)
+
+
+def _run_in_container(config: Path, *, workdir: Path | None, image: str | None,
+                      dry_run: bool, programmatic: bool, limit: int | None,
+                      no_publish: bool) -> None:
+    """Phase 2: dispatch via `docker run` against the pinned image."""
+    from tools.evalctl.container import (
+        DEFAULT_IMAGE, ContainerError, run_in_container,
+    )
+
+    img = image or DEFAULT_IMAGE
+    run_dir = workdir or Path(tempfile.gettempdir()) / "run" / str(uuid.uuid4())
+
+    typer.echo(f"image:       {img}")
+    typer.echo(f"workdir:     {run_dir}")
+
+    if dry_run:
+        typer.echo("DRY RUN \u2014 would docker-run the image with this config mounted.")
+        return
+
+    extra: list[str] = []
+    if not programmatic:
+        extra.append("--subprocess")
+    if limit:
+        extra += ["--limit", str(limit)]
+    if no_publish:
+        extra.append("--no-publish")
+
+    try:
+        rc = run_in_container(config, workdir=run_dir, image=img,
+                              extra_evalctl_args=extra)
+    except ContainerError as e:
+        typer.secho(str(e), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2)
+
+    if rc != 0:
+        typer.secho(f"Container exited with code {rc}", fg=typer.colors.RED)
+        raise typer.Exit(code=2)
+    typer.secho(f"Container run complete. Artifacts in {run_dir}",
+                fg=typer.colors.GREEN)
 
 
 @app.command()
@@ -227,10 +280,22 @@ def _run_with_proto(config: Path, *, no_publish: bool, dry_run: bool,
     )
 
     run_dir = workdir or Path(tempfile.gettempdir()) / "run" / manifest.run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    # Write the manifest + resolved config up front (Phase 0/1 parity).
+    # The dispatcher writes results_*.json + samples_*.jsonl alongside.
+    from google.protobuf import json_format as _jf
+    (run_dir / "manifest.json").write_text(
+        _jf.MessageToJson(manifest, preserving_proto_field_name=True, indent=2)
+        + "\n"
+    )
+    (run_dir / "config.resolved.yaml").write_text(
+        _jf.MessageToJson(cfg, preserving_proto_field_name=True, indent=2)
+        + "\n"
+    )
 
     if programmatic:
         # Convert to dict and route through the programmatic dispatcher.
-        from google.protobuf import json_format as _jf
         cfg_dict = _jf.MessageToDict(cfg, preserving_proto_field_name=True,
                                      use_integers_for_enums=False)
         # Friendly enum form expected by the programmatic dispatcher.

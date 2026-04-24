@@ -5,7 +5,7 @@ the full design.
 
 ## Status
 
-Phases 0 + 1 complete.
+Phases 0 + 1 + 2 complete.
 
 **Phase 0 (skeleton):**
 
@@ -30,9 +30,25 @@ Phases 0 + 1 complete.
   match, exit 3 on drift. Used to gate "this change doesn't perturb
   historical sweeps."
 
+**Phase 2 (containerization + CI):**
+
+- `docker/Dockerfile` builds a multi-stage runtime image. Tag convention:
+  `eval-harness:<harness_version>-<wrapper_git_sha>`.
+- `make docker-build` / `docker-push` / `docker-run` / `docker-shell`.
+  Override registry with `IMAGE_REGISTRY=us-docker.pkg.dev/<proj>/eval`.
+- `evalctl run ... --local --container [--image <ref>]` — dispatch via
+  `docker run` against the pinned image. Mounts the config + a workdir,
+  passes the image ref/digest into the container so the manifest records
+  it (R1, R2).
+- Manifest auto-detects `container.image` + `container.digest` from
+  `EVALCTL_IMAGE_REF` / `EVALCTL_IMAGE_DIGEST` env vars set by the image.
+- GitHub Actions workflow (`.github/workflows/evalctl-ci.yml`) runs the
+  smoke tier on every push/PR plus a docker build smoke; the proto-coupled
+  bazel tier runs on push (skipped on fork PRs). Artifact Registry push
+  is stubbed and gated behind WIF secrets.
+
 Not yet implemented (later phases):
 
-- Docker dispatch (Phase 2).
 - GCS upload + BQ insert (Phase 3).
 - ADC auth flow (Phase 4).
 - Vertex Custom Job dispatch (Phase 5).
@@ -104,7 +120,7 @@ There are two test tiers:
 
 | Tier | Command | Deps | Coverage |
 |---|---|---|---|
-| **Smoke** (no proto) | `make smoke` | python, PyYAML | env allow-list, YAML+sha256, enum normalization, lm_eval argv translation, chat-template defaulting, results-roundtrip (Phase 1), programmatic dispatcher with mocked lm_eval. 63 unit tests + 2 end-to-end checks. |
+| **Smoke** (no proto) | `make smoke` | python, PyYAML | env allow-list, YAML+sha256, enum normalization, lm_eval argv translation, chat-template defaulting, results-roundtrip (Phase 1), programmatic dispatcher with mocked lm_eval, container dispatcher with mocked docker (Phase 2). 70 unit tests + 2 end-to-end checks. |
 | **Full** (proto-coupled) | `make test` | bazel, protoc | Adds config_loader_test (proto roundtrip) and manifest_test (proto-typed RunManifest builder). |
 
 Run the smoke tier on any dev laptop without bazel/protoc:
@@ -210,17 +226,25 @@ tools/evalctl/
   cli.py               Typer entry, subcommands. Lazy proto imports with
                        pure-Python fallback when proto isn't available.
   config_loader.py     YAML -> EvalConfig (proto); delegates to _pure.
-  manifest.py          Builds RunManifest (UUID, git, env allow-list).
+  manifest.py          Builds RunManifest (UUID, git, env allow-list,
+                       container image+digest from $EVALCTL_IMAGE_*).
   execution.py         EvalConfig -> lm_eval argv via _pure; subprocess
                        dispatch (Phase 0 fallback).
   programmatic.py      Phase 1: in-process lm_eval.simple_evaluate dispatch.
                        Per-task num_fewshot via call grouping.
   repro.py             Phase 1: results.json -> EvalConfig and
                        diff_results(a, b) for drift detection.
+  container.py         Phase 2: docker run dispatcher.
   pure_test.py         Proto-free unit tests for _pure (33 cases).
   repro_test.py        Proto-free unit tests for repro (20 cases).
   programmatic_test.py Proto-free unit tests for programmatic (10 cases).
+  container_test.py    Proto-free unit tests for container (7 cases).
   smoke_test.sh        5-step smoke driver (env, syntax, units, e2e, repro).
+
+docker/
+  Dockerfile           Multi-stage runtime image (Phase 2).
+.github/workflows/
+  evalctl-ci.yml       Smoke + docker + bazel CI (Phase 2).
 ```
 
 Schema lives in `proto/eval/v1/`.

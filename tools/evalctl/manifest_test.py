@@ -6,7 +6,7 @@ import os
 import unittest
 from unittest import mock
 
-from proto.eval.v1 import config_pb2, manifest_pb2
+from proto.eval.v1 import common_pb2, config_pb2, manifest_pb2
 from tools.evalctl.manifest import ENV_ALLOW_LIST, build_manifest
 
 
@@ -15,7 +15,7 @@ def _minimal_config() -> config_pb2.EvalConfig:
     cfg.run.name = "smoke"
     cfg.run.tags["team"] = "openmaas"
     cfg.harness.version = "0.4.2"
-    cfg.endpoint.type = config_pb2.ENDPOINT_TYPE_VERTEX_CHAT
+    cfg.endpoint.type = common_pb2.ENDPOINT_TYPE_VERTEX_CHAT
     cfg.endpoint.model_id = "google/foo"
     cfg.endpoint.endpoint_id = "projects/x/endpoints/y"
     t = cfg.tasks.add()
@@ -72,6 +72,36 @@ class ManifestTest(unittest.TestCase):
         self.assertEqual(m.execution_mode, manifest_pb2.EXECUTION_MODE_REMOTE)
         self.assertEqual(m.container.image, "img:tag")
         self.assertEqual(m.container.digest, "sha256:deadbeef")
+
+    def test_container_provenance_auto_detected_from_env(self) -> None:
+        """Phase 2: when no explicit image/digest, read from EVALCTL_IMAGE_*."""
+        env = {
+            "USER": "tcli",
+            "EVALCTL_IMAGE_REF": "us-docker.pkg.dev/p/eval/eval-harness:0.4.2-abc",
+            "EVALCTL_IMAGE_DIGEST": "sha256:cafebabe",
+        }
+        with mock.patch.dict(os.environ, env, clear=True):
+            m = build_manifest(_minimal_config(), config_sha256="x",
+                               execution_mode=manifest_pb2.EXECUTION_MODE_LOCAL)
+        self.assertEqual(
+            m.container.image,
+            "us-docker.pkg.dev/p/eval/eval-harness:0.4.2-abc",
+        )
+        self.assertEqual(m.container.digest, "sha256:cafebabe")
+
+    def test_explicit_image_overrides_env(self) -> None:
+        env = {
+            "USER": "tcli",
+            "EVALCTL_IMAGE_REF": "auto:latest",
+            "EVALCTL_IMAGE_DIGEST": "sha256:auto",
+        }
+        with mock.patch.dict(os.environ, env, clear=True):
+            m = build_manifest(_minimal_config(), config_sha256="x",
+                               execution_mode=manifest_pb2.EXECUTION_MODE_REMOTE,
+                               image="explicit:tag",
+                               image_digest="sha256:explicit")
+        self.assertEqual(m.container.image, "explicit:tag")
+        self.assertEqual(m.container.digest, "sha256:explicit")
 
 
 if __name__ == "__main__":
