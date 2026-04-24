@@ -22,9 +22,42 @@ from typing import Mapping
 
 DEFAULT_IMAGE = os.getenv("EVALCTL_IMAGE_REF") or "local/eval-harness:latest"
 
+# Env-var names whose values must NEVER appear in stdout/stderr or logs.
+# Anything here is masked when we render docker argv for display.
+_SECRET_ENV_VARS: frozenset[str] = frozenset({
+    "HF_TOKEN",
+    "HUGGING_FACE_HUB_TOKEN",
+    "HUGGINGFACE_TOKEN",
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    "GCLOUD_TOKEN",
+})
+
 
 class ContainerError(RuntimeError):
     """Raised when the container can't be dispatched (missing docker, etc.)."""
+
+
+def _redact_argv(argv: list[str]) -> list[str]:
+    """Mask values of secret env vars in a docker argv before printing.
+
+    Looks for `-e VAR=value` pairs; if VAR is in _SECRET_ENV_VARS, the
+    value is replaced with `***REDACTED***` for display only. The actual
+    argv passed to subprocess.run is unchanged.
+    """
+    masked: list[str] = []
+    i = 0
+    while i < len(argv):
+        if argv[i] == "-e" and i + 1 < len(argv) and "=" in argv[i + 1]:
+            name, _, _ = argv[i + 1].partition("=")
+            if name in _SECRET_ENV_VARS:
+                masked += [argv[i], f"{name}=***REDACTED***"]
+                i += 2
+                continue
+        masked.append(argv[i])
+        i += 1
+    return masked
 
 
 def docker_available() -> bool:
@@ -128,6 +161,7 @@ def run_in_container(
     ]
 
     print("Container dispatch:")
-    print("  " + " ".join(shlex.quote(a) for a in docker_argv))
+    safe_argv = _redact_argv(docker_argv)
+    print("  " + " ".join(shlex.quote(a) for a in safe_argv))
     proc = subprocess.run(docker_argv)
     return proc.returncode

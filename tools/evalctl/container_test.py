@@ -14,6 +14,7 @@ from unittest import mock
 from tools.evalctl import container
 from tools.evalctl.container import (
     ContainerError,
+    _redact_argv,
     docker_available,
     resolve_image_digest,
     run_in_container,
@@ -92,6 +93,53 @@ class RunInContainerTest(unittest.TestCase):
         # Extra evalctl args appended.
         self.assertIn("--limit", argv)
         self.assertIn("5", argv)
+
+
+class RedactArgvTest(unittest.TestCase):
+    """Critical security boundary: secret env var values must NEVER appear
+    in stdout/stderr or CI logs. The diagnostic print() in
+    run_in_container goes through _redact_argv first."""
+
+    def test_hf_token_value_redacted(self) -> None:
+        argv = ["docker", "run", "-e", "HF_TOKEN=hf_real_secret_value", "img:tag"]
+        out = _redact_argv(argv)
+        self.assertIn("HF_TOKEN=***REDACTED***", out)
+        self.assertNotIn("hf_real_secret_value", " ".join(out))
+
+    def test_openai_key_value_redacted(self) -> None:
+        argv = ["docker", "run", "-e", "OPENAI_API_KEY=sk-leakable", "img"]
+        out = _redact_argv(argv)
+        self.assertNotIn("sk-leakable", " ".join(out))
+
+    def test_non_secret_env_var_passes_through(self) -> None:
+        argv = ["docker", "run", "-e", "EVALCTL_IMAGE_REF=img:tag", "img"]
+        out = _redact_argv(argv)
+        self.assertEqual(out, argv)
+
+    def test_mixed_argv_only_secrets_masked(self) -> None:
+        argv = [
+            "docker", "run",
+            "-e", "EVALCTL_IMAGE_REF=img:tag",
+            "-e", "HF_TOKEN=hf_secret",
+            "-v", "/host:/in:ro",
+            "-e", "HUGGING_FACE_HUB_TOKEN=hf_other",
+            "img:tag", "evalctl", "run",
+        ]
+        out = _redact_argv(argv)
+        joined = " ".join(out)
+        # Secrets gone:
+        self.assertNotIn("hf_secret", joined)
+        self.assertNotIn("hf_other", joined)
+        # Non-secrets and structure preserved:
+        self.assertIn("EVALCTL_IMAGE_REF=img:tag", out)
+        self.assertIn("/host:/in:ro", out)
+        self.assertEqual(out[-3:], ["img:tag", "evalctl", "run"])
+
+    def test_value_with_equals_sign_handled(self) -> None:
+        argv = ["docker", "run", "-e", "OPENAI_API_KEY=sk-a=b=c", "img"]
+        out = _redact_argv(argv)
+        self.assertNotIn("sk-a=b=c", " ".join(out))
+        self.assertIn("OPENAI_API_KEY=***REDACTED***", out)
 
 
 if __name__ == "__main__":
