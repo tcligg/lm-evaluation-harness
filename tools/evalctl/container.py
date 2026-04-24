@@ -97,6 +97,27 @@ def run_in_container(
         "-e", f"EVALCTL_IMAGE_REF={image}",
         "-e", f"EVALCTL_IMAGE_DIGEST={digest}",
     ]
+    # Propagate auth-bearing env vars from the host shell so the harness
+    # can authenticate to HF / OpenAI / the chat endpoint without
+    # baking secrets into the image. Only the explicit allow-list below
+    # is forwarded; nothing else from the host env leaks in.
+    _AUTH_PASSTHROUGH = (
+        "HF_TOKEN",
+        "HUGGING_FACE_HUB_TOKEN",
+        "HUGGINGFACE_TOKEN",
+        "OPENAI_API_KEY",
+    )
+    for var in _AUTH_PASSTHROUGH:
+        val = os.environ.get(var)
+        if val:
+            docker_argv += ["-e", f"{var}={val}"]
+    # Mount the HF token cache (read-only) so datasets that auth via the
+    # cached token also work inside the container.
+    hf_cache = Path.home() / ".cache" / "huggingface"
+    if hf_cache.exists():
+        docker_argv += [
+            "-v", f"{hf_cache}:/home/evalctl/.cache/huggingface:ro",
+        ]
     for k, v in (env or {}).items():
         docker_argv += ["-e", f"{k}={v}"]
     docker_argv += [
