@@ -43,17 +43,26 @@ Phases 0 + 1 + 2 complete.
   it (R1, R2).
 - Manifest auto-detects `container.image` + `container.digest` from
   `MERIT_IMAGE_REF` / `MERIT_IMAGE_DIGEST` env vars set by the image.
-- GitHub Actions workflow (`.github/workflows/evalctl-ci.yml`) runs the
+- GitHub Actions workflow (`.github/workflows/merit-ci.yml`) runs the
   smoke tier on every push/PR plus a docker build smoke; the proto-coupled
   bazel tier runs on push (skipped on fork PRs). Artifact Registry push
   is stubbed and gated behind WIF secrets.
+
+**Lookup (run_id-keyed retrieval):**
+
+- `evalctl show <run_id> [--json]` — inspect a stored run. Resolves
+  via local artifacts now; GCS / BQ backends activate in Phase 3.
+- `evalctl compare <run_id_a> <run_id_b> [--score-tol] [--n-samples-tol]`
+  — diff two runs by id (delegates to `repro.diff_results`).
+- `evalctl ls [-n 20]` — list recent local runs newest-first; useful
+  because UUIDs aren't memorable. Override search paths with
+  `MERIT_RUN_ROOTS=/path1:/path2`.
 
 Not yet implemented (later phases):
 
 - GCS upload + BQ insert (Phase 3).
 - ADC auth flow (Phase 4).
 - Vertex Custom Job dispatch (Phase 5).
-- `evalctl show` / `evalctl compare` (require Phase 3).
 
 ### Pre-requisites for an actual `--local` run against a Vertex endpoint
 
@@ -121,7 +130,7 @@ There are two test tiers:
 
 | Tier | Command | Deps | Coverage |
 |---|---|---|---|
-| **Smoke** (no proto) | `make smoke` | python, PyYAML | env allow-list, YAML+sha256, enum normalization, lm_eval argv translation, chat-template defaulting, results-roundtrip (Phase 1), programmatic dispatcher with mocked lm_eval, container dispatcher with mocked docker (Phase 2). 70 unit tests + 2 end-to-end checks. |
+| **Smoke** (no proto) | `make smoke` | python, PyYAML | env allow-list, YAML+sha256, enum normalization, lm_eval argv translation, chat-template defaulting, results-roundtrip (Phase 1), programmatic dispatcher with mocked lm_eval, container dispatcher with mocked docker (Phase 2), run_id resolver. 88 unit tests + 2 end-to-end checks. |
 | **Full** (proto-coupled) | `make test` | bazel, protoc | Adds config_loader_test (proto roundtrip) and manifest_test (proto-typed RunManifest builder). |
 
 Run the smoke tier on any dev laptop without bazel/protoc:
@@ -236,10 +245,13 @@ tools/evalctl/
   repro.py             Phase 1: results.json -> EvalConfig and
                        diff_results(a, b) for drift detection.
   container.py         Phase 2: docker run dispatcher.
+  runs.py              Lookup: resolve run_id across local/GCS/BQ
+                       backends. Backs `evalctl show / compare / ls`.
   pure_test.py         Proto-free unit tests for _pure (33 cases).
   repro_test.py        Proto-free unit tests for repro (20 cases).
   programmatic_test.py Proto-free unit tests for programmatic (10 cases).
-  container_test.py    Proto-free unit tests for container (7 cases).
+  container_test.py    Proto-free unit tests for container (12 cases).
+  runs_test.py         Proto-free unit tests for runs (13 cases).
   smoke_test.sh        5-step smoke driver (env, syntax, units, e2e, repro).
 
 docker/

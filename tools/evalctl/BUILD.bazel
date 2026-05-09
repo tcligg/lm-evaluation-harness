@@ -38,6 +38,15 @@ py_library(
     deps = [],
 )
 
+# Run-id resolver. Backs `evalctl show / compare / ls`. Proto-free; the
+# GCS / BQ backends lazy-import google.cloud.* and gracefully no-op
+# when not installed.
+py_library(
+    name = "runs_lib",
+    srcs = ["runs.py"],
+    deps = [],
+)
+
 py_library(
     name = "evalctl_lib",
     srcs = [
@@ -50,6 +59,7 @@ py_library(
         ":container_lib",
         ":phase1_lib",
         ":pure_lib",
+        ":runs_lib",
         "//proto/merit/v1:merit_py_proto",
         requirement("typer"),
         requirement("pyyaml"),
@@ -88,6 +98,12 @@ py_test(
     name = "container_test",
     srcs = ["container_test.py"],
     deps = [":container_lib"],
+)
+
+py_test(
+    name = "runs_test",
+    srcs = ["runs_test.py"],
+    deps = [":runs_lib"],
 )
 
 # Proto-coupled tests. Require py_proto_library to be built.

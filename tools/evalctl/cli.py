@@ -184,23 +184,194 @@ def validate(
 
 
 @app.command()
-def show(run_id: str) -> None:
-    """Show a stored run (stub: BQ sink lands in Phase 3)."""
-    typer.secho(
-        f"`show` requires the BigQuery sink (Phase 3). Asked for run_id={run_id}.",
-        fg=typer.colors.YELLOW,
-    )
-    raise typer.Exit(code=1)
+def show(
+    run_id: str = typer.Argument(..., help="UUID of a previous run."),
+    json_out: bool = typer.Option(
+        False, "--json",
+        help="Emit the raw manifest+results as JSON (machine-readable)."),
+) -> None:
+    """Show everything we have for a given run_id.
+
+    Searches local scratch dirs first, then GCS / BigQuery once those
+    backends land in Phase 3. Exit 0 on hit, exit 4 if no backend
+    knows about the run_id.
+    """
+    from tools.evalctl.runs import RunNotFound, find_run_by_id
+
+    try:
+        ref = find_run_by_id(run_id)
+    except RunNotFound as e:
+        typer.secho(str(e), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=4)
+
+    if json_out:
+        import json as _json
+        payload = {
+            "run_id": ref.run_id,
+            "source": ref.source,
+            "workdir": str(ref.workdir) if ref.workdir else None,
+            "manifest": ref.manifest,
+            "results": ref.results,
+            "config": ref.config,
+            "sample_files": [str(p) for p in ref.sample_files],
+            "log_path": str(ref.log_path) if ref.log_path else None,
+        }
+        typer.echo(_json.dumps(payload, indent=2, default=str))
+        return
+
+    _print_run_summary(ref)
 
 
 @app.command()
-def compare(run_id_a: str, run_id_b: str) -> None:
-    """Compare two stored runs (stub: BQ sink lands in Phase 3)."""
-    typer.secho(
-        f"`compare` requires the BigQuery sink (Phase 3). Asked for {run_id_a} vs {run_id_b}.",
-        fg=typer.colors.YELLOW,
+def compare(
+    run_a: str = typer.Argument(..., help="UUID of the reference run."),
+    run_b: str = typer.Argument(..., help="UUID of the candidate run."),
+    score_tol: float = typer.Option(
+        0.0, "--score-tol",
+        help="Per-metric score tolerance (0 = exact)."),
+    n_samples_tol: int = typer.Option(
+        0, "--n-samples-tol",
+        help="Per-task n-samples tolerance (0 = exact)."),
+) -> None:
+    """Compare two runs by run_id.
+
+    Resolves both run_ids via the same backend search as `show`, then
+    runs the structural+numeric diff used by `evalctl diff`. Exit 0 on
+    match, exit 3 on drift, exit 4 if either run_id can't be found.
+    """
+    from tools.evalctl.repro import diff_results
+    from tools.evalctl.runs import RunNotFound, find_run_by_id
+
+    try:
+        ref_a = find_run_by_id(run_a)
+        ref_b = find_run_by_id(run_b)
+    except RunNotFound as e:
+        typer.secho(str(e), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=4)
+
+    if not ref_a.results or not ref_b.results:
+        missing = [r.run_id for r in (ref_a, ref_b) if not r.results]
+        typer.secho(
+            f"No results_*.json on disk for: {missing}. "
+            "Either the runs are still in progress or weren't published.",
+            fg=typer.colors.RED, err=True,
+        )
+        raise typer.Exit(code=4)
+
+    # diff_results takes Paths (not in-memory dicts) so it can stream
+    # large files. Resolve to the newest results file in each workdir.
+    def _newest(ref) -> Path:
+        return sorted(ref.workdir.glob("results_*.json"),
+                      key=lambda p: p.stat().st_mtime, reverse=True)[0]
+
+    report, drifted = diff_results(
+        _newest(ref_a), _newest(ref_b),
+        score_tol=score_tol, n_samples_tol=n_samples_tol,
     )
-    raise typer.Exit(code=1)
+    typer.echo(report)
+    if drifted:
+        typer.secho("DRIFT DETECTED", fg=typer.colors.RED)
+        raise typer.Exit(code=3)
+    typer.secho("MATCH", fg=typer.colors.GREEN)
+
+
+@app.command("ls")
+def list_runs(
+    limit: int = typer.Option(20, "--limit", "-n",
+                              help="Max rows to display."),
+) -> None:
+    """List recent local runs, newest first.
+
+    Reads manifest.json files under MERIT_RUN_ROOTS (defaults to
+    /tmp/run). Output format:
+
+      <run_id>  <timestamp>  <status>  <user>  tasks=N  <name>
+
+    Pipe into `evalctl show <id>` for details.
+    """
+    from tools.evalctl.runs import list_local_runs, summarize
+
+    refs = list_local_runs(limit=limit)
+    if not refs:
+        typer.secho("No local runs found under the configured roots.",
+                    fg=typer.colors.YELLOW)
+        typer.echo("Set MERIT_RUN_ROOTS to scan additional directories.")
+        return
+    for ref in refs:
+        typer.echo(summarize(ref))
+
+
+# ---------------------------------------------------------------------------
+# Pretty-printer for `evalctl show`.
+# ---------------------------------------------------------------------------
+
+
+def _print_run_summary(ref) -> None:
+    from tools.evalctl.runs import humanize_age
+
+    m = ref.manifest or {}
+    typer.secho(f"run_id:      {ref.run_id}", fg=typer.colors.CYAN, bold=True)
+    typer.echo(f"source:      {ref.source}"
+               + (f"  ({ref.workdir})" if ref.workdir else ""))
+    typer.echo(f"name:        {m.get('name', '?')}")
+    status = m.get("status", "?").removeprefix("RUN_STATUS_").lower()
+    typer.echo(f"status:      {status}")
+    typer.echo(f"user:        {m.get('user_id', '?')}")
+    typer.echo(f"timestamp:   {m.get('timestamp_utc', '?')}")
+    if ref.workdir and ref.workdir.exists():
+        typer.echo(f"             ({humanize_age(ref.workdir.stat().st_mtime)})")
+    mode = m.get("execution_mode", "").removeprefix("EXECUTION_MODE_").lower()
+    typer.echo(f"mode:        {mode}")
+    container = m.get("container", {}) or {}
+    if container.get("image"):
+        typer.echo(f"image:       {container['image']}")
+    if container.get("digest"):
+        typer.echo(f"digest:      {container['digest']}")
+    git = m.get("git", {}) or {}
+    if git.get("wrapper_commit"):
+        dirty = " (dirty)" if git.get("wrapper_dirty") else ""
+        typer.echo(f"wrapper:     {git['wrapper_commit'][:12]}{dirty}")
+    if git.get("harness_version"):
+        typer.echo(f"harness:     {git['harness_version']}")
+    if m.get("config_sha256"):
+        typer.echo(f"config_sha:  {m['config_sha256']}")
+    endpoint = m.get("endpoint", {}) or {}
+    if endpoint.get("model_id"):
+        typer.echo(
+            f"endpoint:    {endpoint.get('type', '?')}  "
+            f"{endpoint.get('model_id', '?')}"
+        )
+    tags = m.get("tags") or {}
+    if tags:
+        typer.echo(f"tags:        {', '.join(f'{k}={v}' for k, v in tags.items())}")
+
+    # Metric summary.
+    results = (ref.results or {}).get("results") or {}
+    if results:
+        typer.echo("")
+        typer.secho("metrics:", bold=True)
+        for task in sorted(results):
+            row = results[task]
+            for metric_key in sorted(row):
+                if metric_key.startswith("alias"):
+                    continue
+                if not isinstance(row[metric_key], (int, float)):
+                    continue
+                typer.echo(f"  {task}.{metric_key}: {row[metric_key]:.6f}")
+
+    # Artifact pointers.
+    typer.echo("")
+    typer.secho("artifacts:", bold=True)
+    if ref.workdir:
+        typer.echo(f"  workdir:  {ref.workdir}")
+    if ref.sample_files:
+        typer.echo(f"  samples:  {len(ref.sample_files)} file(s)")
+        for p in ref.sample_files[:3]:
+            typer.echo(f"            {p.name}")
+        if len(ref.sample_files) > 3:
+            typer.echo(f"            ... and {len(ref.sample_files) - 3} more")
+    if ref.log_path:
+        typer.echo(f"  log:      {ref.log_path}")
 
 
 @app.command()
