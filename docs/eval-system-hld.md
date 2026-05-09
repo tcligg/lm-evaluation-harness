@@ -3,6 +3,7 @@
 **Status:** Draft
 **Owner:** tcli
 **Last updated:** 2026-04-21 (rev 2 — proto/Bazel pivot)
+**Implementation status:** see [`eval-system-plan.md`](./eval-system-plan.md)
 
 ## 1. Background
 

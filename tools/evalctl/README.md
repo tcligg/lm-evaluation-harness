@@ -1,7 +1,8 @@
 # evalctl
 
 Developer CLI for the eval runner system. See `docs/eval-system-hld.md` for
-the full design.
+the full design and `docs/eval-system-plan.md` for current implementation
+status (which phases shipped, which are pending, what's blocked).
 
 ## Status
 
