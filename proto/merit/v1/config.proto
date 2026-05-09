@@ -4,10 +4,10 @@
 // This is the primary input to `evalctl run`.
 syntax = "proto3";
 
-package eval.v1;
+package merit.v1;
 
 import "google/protobuf/struct.proto";
-import "proto/eval/v1/common.proto";
+import "proto/merit/v1/common.proto";
 
 message EvalConfig {
   // Bumped on breaking changes. Runner asserts compatibility on load.
@@ -65,6 +65,6 @@ message Limits {
 }
 
 message OutputSinks {
-  string gcs_bucket = 1;    // e.g. "gs://eval-artifacts-prod"
-  string bq_dataset = 2;    // e.g. "eval_results"
+  string gcs_bucket = 1;    // e.g. "gs://merit-artifacts-prod"
+  string bq_dataset = 2;    // e.g. "merit_results"
 }

@@ -1,4 +1,4 @@
-name: evalctl CI
+name: MERIT CI
 
 # Phase 2 CI. Three jobs:
 #   smoke   - proto-free unit suite + YAML->argv check + repro roundtrip.
@@ -65,7 +65,7 @@ jobs:
 
       - name: Smoke-test image (--help inside container)
         run: |
-          IMG=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep eval-harness | head -1)
+          IMG=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep merit | head -1)
           echo "Testing image: $IMG"
           docker run --rm "$IMG" --help
           docker run --rm "$IMG" validate examples/configs/gpqa_diamond_3shot_grok42.yaml \
@@ -100,7 +100,7 @@ jobs:
           bazel --version
 
       - name: bazel test //tools/evalctl/...
-        run: bazel test //tools/evalctl/... //proto/eval/v1/...
+        run: bazel test //tools/evalctl/... //proto/merit/v1/...
 
   # ---------------------------------------------------------------------------
   # Artifact Registry push: gated on tags or main-branch pushes only.
@@ -126,5 +126,5 @@ jobs:
   #       run: gcloud auth configure-docker us-docker.pkg.dev --quiet
   #     - name: Build + push
   #       run: |
-  #         make docker-build IMAGE_REGISTRY=us-docker.pkg.dev/${{ vars.GCP_PROJECT }}/eval
-  #         make docker-push  IMAGE_REGISTRY=us-docker.pkg.dev/${{ vars.GCP_PROJECT }}/eval
+  #         make docker-build IMAGE_REGISTRY=us-docker.pkg.dev/${{ vars.GCP_PROJECT }}/merit
+  #         make docker-push  IMAGE_REGISTRY=us-docker.pkg.dev/${{ vars.GCP_PROJECT }}/merit

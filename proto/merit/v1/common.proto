@@ -5,7 +5,7 @@
 // field numbers/names indefinitely.
 syntax = "proto3";
 
-package eval.v1;
+package merit.v1;
 
 // EndpointType enumerates supported model-serving backends.
 //
@@ -25,7 +25,7 @@ enum EndpointType {
 enum AuthMode {
   AUTH_MODE_UNSPECIFIED = 0;
   AUTH_MODE_GCLOUD_ADC = 1;   // Application Default Credentials (preferred).
-  AUTH_MODE_STATIC_TOKEN = 2; // Token sourced from EVALCTL_STATIC_TOKEN env var.
+  AUTH_MODE_STATIC_TOKEN = 2; // Token sourced from MERIT_STATIC_TOKEN env var.
   AUTH_MODE_NONE = 3;         // No auth (local self-hosted endpoints).
 }
 

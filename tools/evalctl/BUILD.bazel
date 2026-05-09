@@ -50,7 +50,7 @@ py_library(
         ":container_lib",
         ":phase1_lib",
         ":pure_lib",
-        "//proto/eval/v1:eval_py_proto",
+        "//proto/merit/v1:merit_py_proto",
         requirement("typer"),
         requirement("pyyaml"),
         requirement("protobuf"),

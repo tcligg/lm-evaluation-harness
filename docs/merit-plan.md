@@ -1,9 +1,11 @@
-# Eval Runner System — Implementation Plan & Status
+# MERIT — Implementation Plan & Status
 
-**Companion to:** `docs/eval-system-hld.md`
+**MERIT — Model Evaluation, Reproducibility, and Tracking**
+
+**Companion to:** [`merit-hld.md`](./merit-hld.md)
 **Status:** Active — Phase 2 complete, Phase 3 next
 **Owner:** tcli
-**Last updated:** 2026-04-24
+**Last updated:** 2026-04-24 (rev 2 — system named MERIT)
 
 This file tracks **actual** delivery against the phased plan in HLD §15.
 Update on every commit that closes a phase task.
@@ -48,7 +50,7 @@ Container-recorded provenance (HLD R2) verified via a real run:
 ```json
 {
   "container": {
-    "image": "local/eval-harness:latest",
+    "image": "local/merit:latest",
     "digest": "sha256:c8f013cf..."
   },
   "config_sha256": "dca546a8d2216ce912076e1cf3447c2ea571c7f0b1769e2d3beb3281502f789e",
@@ -102,9 +104,9 @@ existing pipeline validates it.
 | Item | Notes |
 |---|---|
 | `docker/Dockerfile` (multi-stage) | builder runs `protoc` via grpcio-tools; runtime adds gcloud SDK |
-| Image tag convention `eval-harness:<harness>-<wrapper_sha>` | built locally; AR push stub commented out |
+| Image tag convention `merit:<harness>-<wrapper_sha>` | built locally; AR push stub commented out |
 | Container dispatch (`evalctl run --local --container [--image]`) | `tools/evalctl/container.py` |
-| Manifest auto-detects `container.image` + `container.digest` from `EVALCTL_IMAGE_*` env | `manifest.py` |
+| Manifest auto-detects `container.image` + `container.digest` from `MERIT_IMAGE_*` env | `manifest.py` |
 | Latent enum bug fix (`config_pb2.EndpointType` → `common_pb2.EndpointType`) | surfaced once proto path was actually exercised |
 | `_run_with_proto` now writes `manifest.json` + `config.resolved.yaml` | parity with `_run_pure` |
 | HF/OpenAI auth env passthrough into container | mounts `~/.cache/huggingface` read-only |
@@ -130,20 +132,20 @@ Per HLD R3 / §6.5 / §8.
 
 ### Scope
 
-- `tools/eval_runner/publish.py`: GCS upload of the entire run scratch dir to
-  `gs://eval-artifacts-prod/runs/<run_id>/`. Atomic upload via temp prefix +
+- `tools/merit_runner/publish.py`: GCS upload of the entire run scratch dir to
+  `gs://merit-artifacts-prod/runs/<run_id>/`. Atomic upload via temp prefix +
   rename. Idempotent on `run_id`.
-- BigQuery insert into the three `eval_results.*` tables. `MERGE` on `run_id`
+- BigQuery insert into the three `merit_results.*` tables. `MERGE` on `run_id`
   for retry safety. Runner writes `published.marker` after successful upload
   to make repeats no-ops.
-- BQ schemas generated from `proto/eval/v1/metrics.proto` via
+- BQ schemas generated from `proto/merit/v1/metrics.proto` via
   `protoc-gen-bq-schema`. Emit to `schemas/bq/*.json`, check in.
 - Provisioning helpers under `schemas/bq/`: a `bq mk` script + (optional)
   Terraform stubs.
 - `evalctl run --no-publish` flag becomes meaningful (was a no-op).
 - `evalctl show <run_id>` and `evalctl compare <a> <b>` finally implemented
   (they're stubbed with exit-1 today).
-- `eval_runs` view (`v_latest_metrics`) for Looker Studio in Phase 6.
+- `merit_runs` view (`v_latest_metrics`) for Looker Studio in Phase 6.
 
 ### Estimate
 2–3 days per HLD §15.

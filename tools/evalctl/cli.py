@@ -12,7 +12,7 @@ Conventions:
 
 Proto availability:
   The CLI gracefully degrades when the generated protobuf modules
-  (proto/eval/v1/_pb2.py) aren't on the import path. The pure-Python
+  (proto/merit/v1/_pb2.py) aren't on the import path. The pure-Python
   fallback uses tools.evalctl._pure for YAML loading and lm_eval argv
   translation. Fallback mode loses proto3 strict field-name validation
   but keeps the same on-the-wire behavior. CI (Phase 2) always runs
@@ -50,7 +50,7 @@ from tools.evalctl._pure import (
 _PROTO_OK = True
 try:
     from google.protobuf import json_format  # noqa: F401
-    from proto.eval.v1 import config_pb2, manifest_pb2  # noqa: F401
+    from proto.merit.v1 import config_pb2, manifest_pb2  # noqa: F401
 
     from tools.evalctl.config_loader import ConfigError, load_config
     from tools.evalctl.execution import dispatch_local_host
@@ -62,7 +62,7 @@ except ImportError as _proto_err:
 
 app = typer.Typer(
     add_completion=False,
-    help="Eval runner CLI. See docs/eval-system-hld.md for the design.",
+    help="MERIT CLI. See docs/merit-hld.md for the design.",
     no_args_is_help=True,
 )
 
@@ -88,11 +88,11 @@ def run(
         help="Cap docs per task. Phase 1 smoke-test convenience."),
     container: bool = typer.Option(
         False, "--container",
-        help="Phase 2: run inside the pinned eval-harness Docker image."),
+        help="Phase 2: run inside the pinned merit Docker image."),
     image: str | None = typer.Option(
         None, "--image",
-        help="Override container image ref. Default: $EVALCTL_IMAGE_REF "
-             "or local/eval-harness:latest."),
+        help="Override container image ref. Default: $MERIT_IMAGE_REF "
+             "or local/merit:latest."),
 ) -> None:
     """Submit an eval run."""
     if not local and not dry_run:

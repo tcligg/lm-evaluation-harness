@@ -36,7 +36,7 @@ EXAMPLE = REPO_ROOT / "examples" / "configs" / "gpqa_diamond_3shot_grok42.yaml"
 
 class EnvAllowListTest(unittest.TestCase):
     def test_known_safe_vars_pass(self) -> None:
-        env = {"USER": "tcli", "EVALCTL_VERTEX_PROJECT": "my-proj"}
+        env = {"USER": "tcli", "MERIT_VERTEX_PROJECT": "my-proj"}
         self.assertEqual(filter_env(env), env)
 
     def test_secrets_are_dropped(self) -> None:

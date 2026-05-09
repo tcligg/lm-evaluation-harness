@@ -1,7 +1,7 @@
 # evalctl
 
-Developer CLI for the eval runner system. See `docs/eval-system-hld.md` for
-the full design and `docs/eval-system-plan.md` for current implementation
+Developer CLI for MERIT (Model Evaluation, Reproducibility, and Tracking). See `docs/merit-hld.md` for
+the full design and `docs/merit-plan.md` for current implementation
 status (which phases shipped, which are pending, what's blocked).
 
 ## Status
@@ -34,7 +34,7 @@ Phases 0 + 1 + 2 complete.
 **Phase 2 (containerization + CI):**
 
 - `docker/Dockerfile` builds a multi-stage runtime image. Tag convention:
-  `eval-harness:<harness_version>-<wrapper_git_sha>`.
+  `merit:<harness_version>-<wrapper_git_sha>`.
 - `make docker-build` / `docker-push` / `docker-run` / `docker-shell`.
   Override registry with `IMAGE_REGISTRY=us-docker.pkg.dev/<proj>/eval`.
 - `evalctl run ... --local --container [--image <ref>]` — dispatch via
@@ -42,7 +42,7 @@ Phases 0 + 1 + 2 complete.
   passes the image ref/digest into the container so the manifest records
   it (R1, R2).
 - Manifest auto-detects `container.image` + `container.digest` from
-  `EVALCTL_IMAGE_REF` / `EVALCTL_IMAGE_DIGEST` env vars set by the image.
+  `MERIT_IMAGE_REF` / `MERIT_IMAGE_DIGEST` env vars set by the image.
 - GitHub Actions workflow (`.github/workflows/evalctl-ci.yml`) runs the
   smoke tier on every push/PR plus a docker build smoke; the proto-coupled
   bazel tier runs on push (skipped on fork PRs). Artifact Registry push
@@ -174,7 +174,7 @@ re-install needed.
 `evalctl` runs in two modes depending on whether the generated protobuf
 modules are importable:
 
-- **Proto mode** (preferred): `protoc`-generated `proto.eval.v1._pb2`
+- **Proto mode** (preferred): `protoc`-generated `proto.merit.v1._pb2`
   modules are on the import path (typically via `bazel run` or after
   `make proto`). Strict proto3 field-name validation, full BQ/manifest
   schema parity. This is what CI runs.
@@ -228,7 +228,7 @@ tools/evalctl/
                        pure-Python fallback when proto isn't available.
   config_loader.py     YAML -> EvalConfig (proto); delegates to _pure.
   manifest.py          Builds RunManifest (UUID, git, env allow-list,
-                       container image+digest from $EVALCTL_IMAGE_*).
+                       container image+digest from $MERIT_IMAGE_*).
   execution.py         EvalConfig -> lm_eval argv via _pure; subprocess
                        dispatch (Phase 0 fallback).
   programmatic.py      Phase 1: in-process lm_eval.simple_evaluate dispatch.
@@ -248,4 +248,4 @@ docker/
   evalctl-ci.yml       Smoke + docker + bazel CI (Phase 2).
 ```
 
-Schema lives in `proto/eval/v1/`.
+Schema lives in `proto/merit/v1/`.

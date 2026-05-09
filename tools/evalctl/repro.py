@@ -13,7 +13,7 @@ Two operations:
       historical sweeps."
 
 Both operate on the harness's existing on-disk format (as documented in
-docs/eval-system-hld.md \u00a76.5) so they don't depend on protoc / our
+docs/merit-hld.md \u00a76.5) so they don't depend on protoc / our
 proto codegen being available.
 """
 
@@ -129,8 +129,8 @@ def reconstruct_config(results_path: Path, *, run_name: str = "reproduced_run") 
         )
         out_lines.append("")
     out_lines.append("output:")
-    out_lines.append("  gcs_bucket: \"gs://eval-artifacts-prod\"  # TODO confirm")
-    out_lines.append("  bq_dataset: \"eval_results\"               # TODO confirm")
+    out_lines.append("  gcs_bucket: \"gs://merit-artifacts-prod\"  # TODO confirm")
+    out_lines.append("  bq_dataset: \"merit_results\"               # TODO confirm")
     return "\n".join(out_lines) + "\n"
 
 

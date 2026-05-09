@@ -1,10 +1,10 @@
 // RunManifest is the auto-generated provenance record for every eval run.
 //
-// Emitted by evalctl, mutated by eval_runner (status transitions),
+// Emitted by evalctl, mutated by merit_runner (status transitions),
 // serialized to GCS as proto3 JSON (filename: manifest.json).
 syntax = "proto3";
 
-package eval.v1;
+package merit.v1;
 
 import "google/protobuf/timestamp.proto";
 
@@ -57,7 +57,7 @@ message GitInfo {
 }
 
 message ContainerInfo {
-  string image = 1;             // e.g. "us-docker.pkg.dev/.../eval-harness:0.4.2-abc123"
+  string image = 1;             // e.g. "us-docker.pkg.dev/.../merit:0.4.2-abc123"
   string digest = 2;            // sha256:... pinned at submit time
 }
 

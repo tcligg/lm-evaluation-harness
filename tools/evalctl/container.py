@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Mapping
 
 
-DEFAULT_IMAGE = os.getenv("EVALCTL_IMAGE_REF") or "local/eval-harness:latest"
+DEFAULT_IMAGE = os.getenv("MERIT_IMAGE_REF") or "local/merit:latest"
 
 # Env-var names whose values must NEVER appear in stdout/stderr or logs.
 # Anything here is masked when we render docker argv for display.
@@ -127,8 +127,8 @@ def run_in_container(
         # Mount the config and the run scratch dir.
         "-v", f"{config_path}:/run/config.yaml:ro",
         "-v", f"{workdir}:/run/out",
-        "-e", f"EVALCTL_IMAGE_REF={image}",
-        "-e", f"EVALCTL_IMAGE_DIGEST={digest}",
+        "-e", f"MERIT_IMAGE_REF={image}",
+        "-e", f"MERIT_IMAGE_DIGEST={digest}",
     ]
     # Propagate auth-bearing env vars from the host shell so the harness
     # can authenticate to HF / OpenAI / the chat endpoint without

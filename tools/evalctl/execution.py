@@ -17,7 +17,7 @@ from pathlib import Path
 
 from google.protobuf import json_format
 
-from proto.eval.v1 import config_pb2, manifest_pb2
+from proto.merit.v1 import config_pb2, manifest_pb2
 
 from tools.evalctl._pure import build_lm_eval_argv
 

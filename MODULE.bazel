@@ -1,11 +1,12 @@
-"""Bazel module definition for the eval runner system.
+"""Bazel module definition for MERIT (Model Evaluation, Reproducibility,
+and Tracking).
 
 Pinned dependency versions live here. Bumping any of these is a reviewable
 change; CI re-runs `bazel test //...` against the new pins.
 """
 
 module(
-    name = "eval_runner",
+    name = "merit",
     version = "0.1.0",
 )
 

@@ -12,7 +12,7 @@ REPO   := $(abspath .)
 #   make docker-build IMAGE_REGISTRY=us-docker.pkg.dev/my-proj/eval
 HARNESS_VERSION ?= 0.4.12.dev0
 WRAPPER_COMMIT  := $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
-IMAGE_NAME      ?= eval-harness
+IMAGE_NAME      ?= merit
 IMAGE_TAG       ?= $(HARNESS_VERSION)-$(WRAPPER_COMMIT)
 IMAGE_REGISTRY  ?= local
 IMAGE_REF       := $(IMAGE_REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG)
@@ -34,7 +34,7 @@ evalctl:
 
 # Build only the proto layer (useful while iterating on schema).
 proto:
-	bazel build //proto/eval/v1:eval_py_proto
+	bazel build //proto/merit/v1:eval_py_proto
 
 # Host venv install for dev iteration without bazel. Requires a venv to be
 # already activated. Useful in Phase 0 before bazel is set up everywhere.

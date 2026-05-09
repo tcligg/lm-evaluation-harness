@@ -1,7 +1,7 @@
 """Proto-free helpers, extracted so they can be unit-tested without
 requiring protoc/bazel codegen to be available.
 
-Anything in this module MUST NOT import from `proto.eval.v1`. The
+Anything in this module MUST NOT import from `proto.merit.v1`. The
 proto-coupled callers (config_loader, manifest, execution) re-export or
 delegate to these helpers.
 
@@ -29,9 +29,9 @@ ENV_ALLOW_LIST: frozenset[str] = frozenset({
     "USER",
     "LOGNAME",
     "HOSTNAME",
-    "EVALCTL_VERTEX_PROJECT",
-    "EVALCTL_VERTEX_REGION",
-    "EVALCTL_OVERRIDE_BASE_URL",
+    "MERIT_VERTEX_PROJECT",
+    "MERIT_VERTEX_REGION",
+    "MERIT_OVERRIDE_BASE_URL",
     "VLLM_HOST",
     "HF_HOME",
 })

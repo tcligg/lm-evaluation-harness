@@ -6,7 +6,7 @@ import os
 import unittest
 from unittest import mock
 
-from proto.eval.v1 import common_pb2, config_pb2, manifest_pb2
+from proto.merit.v1 import common_pb2, config_pb2, manifest_pb2
 from tools.evalctl.manifest import ENV_ALLOW_LIST, build_manifest
 
 
@@ -50,7 +50,7 @@ class ManifestTest(unittest.TestCase):
     def test_env_allow_list_filters_secrets(self) -> None:
         fake_env = {
             "USER": "tcli",
-            "EVALCTL_VERTEX_PROJECT": "my-proj",
+            "MERIT_VERTEX_PROJECT": "my-proj",
             "OPENAI_API_KEY": "sk-secret-should-be-dropped",
             "AWS_SECRET_ACCESS_KEY": "should-be-dropped",
         }
@@ -59,7 +59,7 @@ class ManifestTest(unittest.TestCase):
                                execution_mode=manifest_pb2.EXECUTION_MODE_LOCAL)
         captured = dict(m.env_allow_listed)
         self.assertIn("USER", captured)
-        self.assertIn("EVALCTL_VERTEX_PROJECT", captured)
+        self.assertIn("MERIT_VERTEX_PROJECT", captured)
         self.assertNotIn("OPENAI_API_KEY", captured)
         self.assertNotIn("AWS_SECRET_ACCESS_KEY", captured)
         # Defensive cross-check: nothing leaked outside the allow list.
@@ -74,26 +74,26 @@ class ManifestTest(unittest.TestCase):
         self.assertEqual(m.container.digest, "sha256:deadbeef")
 
     def test_container_provenance_auto_detected_from_env(self) -> None:
-        """Phase 2: when no explicit image/digest, read from EVALCTL_IMAGE_*."""
+        """Phase 2: when no explicit image/digest, read from MERIT_IMAGE_*."""
         env = {
             "USER": "tcli",
-            "EVALCTL_IMAGE_REF": "us-docker.pkg.dev/p/eval/eval-harness:0.4.2-abc",
-            "EVALCTL_IMAGE_DIGEST": "sha256:cafebabe",
+            "MERIT_IMAGE_REF": "us-docker.pkg.dev/p/eval/merit:0.4.2-abc",
+            "MERIT_IMAGE_DIGEST": "sha256:cafebabe",
         }
         with mock.patch.dict(os.environ, env, clear=True):
             m = build_manifest(_minimal_config(), config_sha256="x",
                                execution_mode=manifest_pb2.EXECUTION_MODE_LOCAL)
         self.assertEqual(
             m.container.image,
-            "us-docker.pkg.dev/p/eval/eval-harness:0.4.2-abc",
+            "us-docker.pkg.dev/p/eval/merit:0.4.2-abc",
         )
         self.assertEqual(m.container.digest, "sha256:cafebabe")
 
     def test_explicit_image_overrides_env(self) -> None:
         env = {
             "USER": "tcli",
-            "EVALCTL_IMAGE_REF": "auto:latest",
-            "EVALCTL_IMAGE_DIGEST": "sha256:auto",
+            "MERIT_IMAGE_REF": "auto:latest",
+            "MERIT_IMAGE_DIGEST": "sha256:auto",
         }
         with mock.patch.dict(os.environ, env, clear=True):
             m = build_manifest(_minimal_config(), config_sha256="x",

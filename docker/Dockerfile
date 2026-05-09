@@ -1,6 +1,6 @@
 # Eval runner image (Phase 2).
 #
-# Tag convention: eval-harness:<harness_version>-<wrapper_git_sha>
+# Tag convention: merit:<harness_version>-<wrapper_git_sha>
 # Build args:
 #   HARNESS_VERSION  Pinned lm-evaluation-harness version. Echoed into
 #                    the manifest at runtime; must match what's installed.
@@ -49,23 +49,23 @@ COPY tools /build/tools
 COPY examples /build/examples
 
 # Pin lm_eval to the pyproject's version. The HARNESS_VERSION arg is
-# asserted against `lm_eval.__version__` at runtime by eval_runner.
+# asserted against `lm_eval.__version__` at runtime by merit_runner.
 # Install the [api] extras so local-chat-completions / vertex_chat work
 # (tenacity, aiohttp, etc.).
 RUN pip install -e "/build[api]"
 
 # Generate _pb2.py files from the proto IDL using grpcio-tools' bundled
-# protoc. Output lands in /build/proto/eval/v1/*_pb2.py and is picked up
+# protoc. Output lands in /build/proto/merit/v1/*_pb2.py and is picked up
 # at runtime via the existing import path.
 RUN pip install grpcio-tools \
  && python -m grpc_tools.protoc \
         --proto_path=/build \
         --python_out=/build \
-        proto/eval/v1/common.proto \
-        proto/eval/v1/config.proto \
-        proto/eval/v1/manifest.proto \
-        proto/eval/v1/metrics.proto \
- && touch /build/proto/__init__.py /build/proto/eval/__init__.py /build/proto/eval/v1/__init__.py
+        proto/merit/v1/common.proto \
+        proto/merit/v1/config.proto \
+        proto/merit/v1/manifest.proto \
+        proto/merit/v1/metrics.proto \
+ && touch /build/proto/__init__.py /build/proto/merit/__init__.py /build/proto/merit/v1/__init__.py
 
 # ---------- Stage 2: runtime -------------------------------------------------
 FROM python:3.11-slim AS runtime
@@ -73,14 +73,14 @@ FROM python:3.11-slim AS runtime
 ARG HARNESS_VERSION=0.4.12.dev0
 ARG WRAPPER_COMMIT=unknown
 
-LABEL org.opencontainers.image.title="eval-harness" \
+LABEL org.opencontainers.image.title="merit" \
       org.opencontainers.image.source="https://github.com/tcligg/lm-evaluation-harness" \
       org.opencontainers.image.description="evalctl + lm-evaluation-harness, pinned for reproducible eval runs" \
       eval.harness_version="${HARNESS_VERSION}" \
       eval.wrapper_commit="${WRAPPER_COMMIT}"
 
-ENV EVALCTL_HARNESS_VERSION=${HARNESS_VERSION} \
-    EVALCTL_WRAPPER_COMMIT=${WRAPPER_COMMIT} \
+ENV MERIT_HARNESS_VERSION=${HARNESS_VERSION} \
+    MERIT_WRAPPER_COMMIT=${WRAPPER_COMMIT} \
     EVALCTL_REPO=/app \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

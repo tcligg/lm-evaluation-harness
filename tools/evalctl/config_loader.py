@@ -23,7 +23,7 @@ from google.protobuf import json_format
 # Generated proto module. When run under bazel, the import path comes from
 # the py_proto_library target; under host venv, it resolves via PYTHONPATH
 # pointing at the bazel-bin output.
-from proto.eval.v1 import config_pb2
+from proto.merit.v1 import config_pb2
 
 from tools.evalctl._pure import (
     CURRENT_SCHEMA_VERSION,

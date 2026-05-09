@@ -1,17 +1,17 @@
-// BigQuery row schemas. Source of truth for the eval_results dataset.
+// BigQuery row schemas. Source of truth for the merit_results dataset.
 //
 // `protoc-gen-bq-schema` consumes this file to emit schemas/bq/*.json.
 // Field tags use proto3 JSON names (camelCase) when serialized.
 syntax = "proto3";
 
-package eval.v1;
+package merit.v1;
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
-import "proto/eval/v1/manifest.proto";
+import "proto/merit/v1/manifest.proto";
 
 // One row per run. Partitioned on DATE(timestamp_utc), clustered on model_id.
-message EvalRun {
+message MeritRun {
   string run_id = 1;            // primary key
   string name = 2;
   RunStatus status = 3;
@@ -27,7 +27,7 @@ message EvalRun {
   string image_digest = 11;
   string config_sha256 = 12;
 
-  string gcs_uri = 13;          // gs://eval-artifacts-prod/runs/<run_id>/
+  string gcs_uri = 13;          // gs://merit-artifacts-prod/runs/<run_id>/
   google.protobuf.Struct tags = 14;
 
   double total_seconds = 15;
@@ -35,9 +35,9 @@ message EvalRun {
 }
 
 // Long-format metrics. One row per (run_id, task, metric, filter).
-// Clustered on (model_id, task) via join with EvalRun.
-message EvalMetric {
-  string run_id = 1;            // foreign key to EvalRun
+// Clustered on (model_id, task) via join with MeritRun.
+message MeritMetric {
+  string run_id = 1;            // foreign key to MeritRun
   string task = 2;
   string metric = 3;
   string filter = 4;            // e.g. "strict-match", "flexible-extract", or "" if N/A
@@ -48,7 +48,7 @@ message EvalMetric {
 }
 
 // Forensic store: full manifest as a JSON column for ad-hoc queries.
-message EvalManifestRaw {
+message MeritManifestRaw {
   string run_id = 1;
   string manifest_json = 2;     // serialized RunManifest as proto3 JSON
   google.protobuf.Timestamp ingested_at = 3;

@@ -1,9 +1,11 @@
-# High-Level Design: Eval Runner System
+# High-Level Design: MERIT
+
+**MERIT — Model Evaluation, Reproducibility, and Tracking**
 
 **Status:** Draft
 **Owner:** tcli
-**Last updated:** 2026-04-21 (rev 2 — proto/Bazel pivot)
-**Implementation status:** see [`eval-system-plan.md`](./eval-system-plan.md)
+**Last updated:** 2026-04-24 (rev 3 — system named MERIT)
+**Implementation status:** see [`merit-plan.md`](./merit-plan.md)
 
 ## 1. Background
 
@@ -30,9 +32,9 @@ Today, evaluation runs against our Vertex-hosted models are executed ad-hoc: eng
 
 | Req | Component(s) |
 |---|---|
-| R1 Standardized execution | Docker image `eval-harness:<ver>`; `config.yaml` schema; in-container `eval_runner` |
+| R1 Standardized execution | Docker image `merit:<ver>`; `config.yaml` schema; in-container `merit_runner` |
 | R2 Tracking & metadata | `manifest.json` emitter in `evalctl`; UUID propagated to all artifacts |
-| R3 Centralized results | BigQuery dataset `eval_results`; GCS bucket `gs://eval-artifacts-prod/runs/<run_id>/` |
+| R3 Centralized results | BigQuery dataset `merit_results`; GCS bucket `gs://merit-artifacts-prod/runs/<run_id>/` |
 | R4 Visualization | Looker Studio dashboard over BQ views |
 | R5 Local triggering | `evalctl run --local`; same image, same manifest, `execution_mode=local` tag |
 
@@ -52,12 +54,12 @@ Today, evaluation runs against our Vertex-hosted models are executed ad-hoc: eng
        │ Local       │          │ Vertex AI       │
        │ docker run  │          │ Custom Job      │
        └──────┬──────┘          └───────┬────────┘
-              │      same image:        │
-              │  eval-harness:<ver>     │
-              └────────────┬────────────┘
+               │      same image:        │
+               │  merit:<ver>            │
+               └────────────┬────────────┘
                            │
                 ┌──────────▼───────────┐
-                │  eval_runner (in     │
+                │  merit_runner (in    │
                 │  container)          │
                 │  ADC -> chat token   │
                 │  lm_eval.simple_eval │
@@ -67,9 +69,9 @@ Today, evaluation runs against our Vertex-hosted models are executed ad-hoc: eng
               ┌────────────┴────────────┐
        ┌──────▼──────┐          ┌───────▼────────┐
        │ GCS         │          │ BigQuery        │
-       │ runs/<id>/  │          │ eval_runs       │
-       │  manifest   │          │ eval_metrics    │
-       │  results    │          │ eval_manifest_  │
+       │ runs/<id>/  │          │ merit_runs      │
+       │  manifest   │          │ merit_metrics   │
+       │  results    │          │ merit_manifest_ │
        │  samples    │          │   raw           │
        └─────────────┘          └───────┬────────┘
                                         │
@@ -88,20 +90,20 @@ Lives at `tools/evalctl/`. Typer-based. Subcommands:
 - `validate <config.yaml>`
 - `show <run_id>` / `compare <run_id_a> <run_id_b>`
 
-Responsibilities: schema validation, manifest construction, image-digest resolution, dispatch to local Docker or Vertex Custom Job. Imports generated proto classes from `proto/eval/v1/`. Bazel target: `//tools/evalctl:evalctl`.
+Responsibilities: schema validation, manifest construction, image-digest resolution, dispatch to local Docker or Vertex Custom Job. Imports generated proto classes from `proto/merit/v1/`. Bazel target: `//tools/evalctl:evalctl`.
 
-### 6.2 `eval_runner` (in-container entrypoint)
-Lives at `tools/eval_runner/`. Re-validates the config (defence in depth), translates it into `lm_eval.simple_evaluate(...)` arguments, executes the eval in-process, then publishes artifacts to GCS and rows to BigQuery. Idempotent on `run_id`. Imports `config_pb2`, `manifest_pb2`, `metrics_pb2` from `eval.v1`. Bazel target: `//tools/eval_runner:eval_runner`.
+### 6.2 `merit_runner` (in-container entrypoint)
+Lives at `tools/merit_runner/`. Re-validates the config (defence in depth), translates it into `lm_eval.simple_evaluate(...)` arguments, executes the eval in-process, then publishes artifacts to GCS and rows to BigQuery. Idempotent on `run_id`. Imports `config_pb2`, `manifest_pb2`, `metrics_pb2` from `merit.v1`. Bazel target: `//tools/merit_runner:merit_runner`.
 
 ### 6.3 Container image
-`docker/Dockerfile`, tag `eval-harness:<harness_version>-<wrapper_git_sha>`, pushed to Artifact Registry by CI on every merge to main. Contains pinned harness, `custom_tasks/`, the runner, and gcloud SDK.
+`docker/Dockerfile`, tag `merit:<harness_version>-<wrapper_git_sha>`, pushed to Artifact Registry by CI on every merge to main. Contains pinned harness, `custom_tasks/`, the runner, and gcloud SDK.
 
 ### 6.4 Auth
-Application Default Credentials (ADC) inside the container. Local: mount `~/.config/gcloud`. Remote: Vertex Custom Job runs as a dedicated service account. `eval_runner.auth.get_chat_token()` exchanges ADC for a bearer token, refreshes on 401. Replaces `refresh_token.sh`.
+Application Default Credentials (ADC) inside the container. Local: mount `~/.config/gcloud`. Remote: Vertex Custom Job runs as a dedicated service account. `merit_runner.auth.get_chat_token()` exchanges ADC for a bearer token, refreshes on 401. Replaces `refresh_token.sh`.
 
 ### 6.5 Storage
-- **GCS:** `gs://eval-artifacts-prod/runs/<run_id>/` holds `manifest.json`, `config.resolved.yaml`, `results_<ts>.json`, `samples_<task>_<ts>.jsonl`, `runner.log`.
-- **BigQuery dataset `eval_results`:** three tables (see §8).
+- **GCS:** `gs://merit-artifacts-prod/runs/<run_id>/` holds `manifest.json`, `config.resolved.yaml`, `results_<ts>.json`, `samples_<task>_<ts>.jsonl`, `runner.log`.
+- **BigQuery dataset `merit_results`:** three tables (see §8).
 
 ### 6.6 Leaderboard
 Looker Studio dashboard over a saved BQ view (`v_latest_metrics`). Two pages: Comparison (run-vs-run delta with stderr-aware significance) and Trend (time series per `(model_id, task, metric)`).
@@ -109,9 +111,9 @@ Looker Studio dashboard over a saved BQ view (`v_latest_metrics`). Two pages: Co
 ### 6.7 Build & Codegen
 Bazel-based monorepo build (bzlmod, pending Day-0 confirmation; see §17). Layout:
 
-- `proto/eval/v1/` — `config.proto`, `manifest.proto`, `metrics.proto`, `common.proto` exposed via `proto_library` + `py_proto_library`.
+- `proto/merit/v1/` — `config.proto`, `manifest.proto`, `metrics.proto`, `common.proto` exposed via `proto_library` + `py_proto_library`.
 - BQ table schemas generated by a `genrule` invoking `protoc-gen-bq-schema` against `metrics.proto`; outputs land in `schemas/bq/`.
-- `tools/evalctl/` and `tools/eval_runner/` are `py_binary` targets depending on the generated proto libraries.
+- `tools/evalctl/` and `tools/merit_runner/` are `py_binary` targets depending on the generated proto libraries.
 - `docker/Dockerfile` is multi-stage: `bazel build //...` produces wheels + generated assets, copied into the runtime image.
 - CI gates on `bazel test //...`. Bazel version pinned via `.bazelversion`.
 - `make build` shim wraps `bazel build //...` for devs unfamiliar with Bazel.
@@ -133,10 +135,10 @@ seed: [int]
 limits: { per_task? }
 output: { gcs_bucket, bq_dataset }
 ```
-Defined in `proto/eval/v1/config.proto`. YAML configs are loaded as dicts and parsed via `google.protobuf.json_format.ParseDict`. Free-form fields (`gen_kwargs`) use `google.protobuf.Struct` to preserve harness pass-through behavior.
+Defined in `proto/merit/v1/config.proto`. YAML configs are loaded as dicts and parsed via `google.protobuf.json_format.ParseDict`. Free-form fields (`gen_kwargs`) use `google.protobuf.Struct` to preserve harness pass-through behavior.
 
 ### 7.2 `manifest.json` (output)
-Defined in `proto/eval/v1/manifest.proto`. Serialized to GCS as proto3 JSON; filename `manifest.json` retained for human readability and `jq` ergonomics. The example below shows the proto3 JSON form:
+Defined in `proto/merit/v1/manifest.proto`. Serialized to GCS as proto3 JSON; filename `manifest.json` retained for human readability and `jq` ergonomics. The example below shows the proto3 JSON form:
 
 ```json
 {
@@ -160,13 +162,13 @@ Defined in `proto/eval/v1/manifest.proto`. Serialized to GCS as proto3 JSON; fil
 
 ## 8. BigQuery Schemas
 
-Schemas are Bazel-generated artifacts of `proto/eval/v1/metrics.proto` via `protoc-gen-bq-schema`. Checked-in copies under `schemas/bq/*.json` exist as reference for dashboard authors and are regenerated on every proto change. Partitioning and clustering hints are expressed as proto field options.
+Schemas are Bazel-generated artifacts of `proto/merit/v1/metrics.proto` via `protoc-gen-bq-schema`. Checked-in copies under `schemas/bq/*.json` exist as reference for dashboard authors and are regenerated on every proto change. Partitioning and clustering hints are expressed as proto field options.
 
-**`eval_runs`** (one row per run): `run_id PK`, `name`, `status`, `user_id`, `timestamp_utc`, `execution_mode`, `model_id`, `endpoint_id`, `harness_version`, `wrapper_commit`, `image_digest`, `config_sha256`, `gcs_uri`, `tags JSON`, `total_seconds`. Partitioned on `DATE(timestamp_utc)`, clustered on `model_id`.
+**`merit_runs`** (one row per run): `run_id PK`, `name`, `status`, `user_id`, `timestamp_utc`, `execution_mode`, `model_id`, `endpoint_id`, `harness_version`, `wrapper_commit`, `image_digest`, `config_sha256`, `gcs_uri`, `tags JSON`, `total_seconds`. Partitioned on `DATE(timestamp_utc)`, clustered on `model_id`.
 
-**`eval_metrics`** (long format): `run_id FK`, `task`, `metric`, `filter`, `score`, `stderr`, `n_samples`, `higher_is_better`. Clustered on `model_id, task` via join with `eval_runs`.
+**`merit_metrics`** (long format): `run_id FK`, `task`, `metric`, `filter`, `score`, `stderr`, `n_samples`, `higher_is_better`. Clustered on `model_id, task` via join with `merit_runs`.
 
-**`eval_manifest_raw`**: `run_id`, `manifest JSON`, `ingested_at`. Forensic lookup.
+**`merit_manifest_raw`**: `run_id`, `manifest JSON`, `ingested_at`. Forensic lookup.
 
 ## 9. Execution Flow
 
@@ -175,16 +177,16 @@ Schemas are Bazel-generated artifacts of `proto/eval/v1/metrics.proto` via `prot
 3. Dispatch:
    - `--local`: `docker run` the image with config + manifest mounted.
    - default: submit Vertex Custom Job; config + manifest staged to `gs://…/runs/<run_id>/`.
-4. In-container `eval_runner` exchanges ADC for chat-endpoint token, calls `lm_eval.simple_evaluate(...)`, writes artifacts to a working dir (`/tmp/run/<run_id>/` — container-local and ephemeral; persistent storage is GCS only).
-5. On completion: upload working dir to GCS, MERGE rows into `eval_runs` + `eval_metrics`, patch `status`.
+4. In-container `merit_runner` exchanges ADC for chat-endpoint token, calls `lm_eval.simple_evaluate(...)`, writes artifacts to a working dir (`/tmp/run/<run_id>/` — container-local and ephemeral; persistent storage is GCS only).
+5. On completion: upload working dir to GCS, MERGE rows into `merit_runs` + `merit_metrics`, patch `status`.
 6. Looker Studio reflects the run within seconds via `v_latest_metrics`.
 
 ## 10. Local vs Remote Parity
 
 | Aspect | Local | Remote |
 |---|---|---|
-| Image | same `eval-harness:<ver>` | same |
-| Entrypoint | `eval_runner` | `eval_runner` |
+| Image | same `merit:<ver>` | same |
+| Entrypoint | `merit_runner` | `merit_runner` |
 | Manifest schema | identical | identical |
 | `execution_mode` | `local` | `remote` |
 | Auth | ADC (mounted `~/.config/gcloud`) | Vertex SA + Workload Identity |
@@ -195,7 +197,7 @@ This satisfies R5: same artifact shape, filterable by `execution_mode`.
 
 ## 11. Security & IAM
 
-- Service account for remote runs: `aiplatform.endpoints.predict`, `bigquery.dataEditor` on `eval_results`, `storage.objectAdmin` on the artifact bucket only.
+- Service account for remote runs: `aiplatform.endpoints.predict`, `bigquery.dataEditor` on `merit_results`, `storage.objectAdmin` on the artifact bucket only.
 - Manifest captures only an allow-listed set of env vars to prevent secret leakage.
 - GCS bucket: uniform bucket-level access; object versioning on for audit.
 - Container image scanned by Artifact Registry on push.
@@ -203,8 +205,8 @@ This satisfies R5: same artifact shape, filterable by `execution_mode`.
 ## 12. Observability
 
 - `runner.log` per run, uploaded with artifacts.
-- `eval_runs.status` is the canonical liveness signal; `running` rows older than 4h are flagged stale by a scheduled BQ check.
-- Vertex Custom Job logs flow to Cloud Logging, linked from `eval_runs` via `vertex_job_id` (added to manifest for remote runs).
+- `merit_runs.status` is the canonical liveness signal; `running` rows older than 4h are flagged stale by a scheduled BQ check.
+- Vertex Custom Job logs flow to Cloud Logging, linked from `merit_runs` via `vertex_job_id` (added to manifest for remote runs).
 
 ## 13. Failure Modes
 
@@ -240,7 +242,7 @@ Phased over ~3 weeks, tracked in §15. The cutover step requires (a) one histori
 - **Sample file size.** Hundreds of MB possible; kept in GCS only, never BQ; size recorded in manifest for dashboard flagging.
 - **Engineer adoption.** Mitigated by shipping a working `examples/configs/` set covering current sweeps and a flag→config migration table.
 - **Bazel adoption curve.** Mitigation: 1-page bootstrap doc, `make build` shim, pin Bazel via `.bazelversion`.
-- **Proto schema migrations.** Mitigation: enforce `reserved` field numbers on deletion; both SWEs must approve any change to `proto/eval/v1/`; package versioned `v1` from day one to make a future `v2` cheap.
+- **Proto schema migrations.** Mitigation: enforce `reserved` field numbers on deletion; both SWEs must approve any change to `proto/merit/v1/`; package versioned `v1` from day one to make a future `v2` cheap.
 
 ## 17. Open Items
 

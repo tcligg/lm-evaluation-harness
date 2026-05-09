@@ -17,7 +17,7 @@ from pathlib import Path
 
 from google.protobuf import timestamp_pb2
 
-from proto.eval.v1 import common_pb2, config_pb2, manifest_pb2
+from proto.merit.v1 import common_pb2, config_pb2, manifest_pb2
 from tools.evalctl._pure import ENV_ALLOW_LIST, filter_env  # noqa: F401 (re-exported)
 
 
@@ -98,12 +98,12 @@ def _detect_container_provenance() -> tuple[str, str]:
     """Read image + digest from env vars set by the Phase 2 Dockerfile.
 
     Returns ("", "") on a host-Python run. The Dockerfile sets:
-      EVALCTL_IMAGE_REF       full registry/name:tag (optional)
-      EVALCTL_IMAGE_DIGEST    sha256:... (optional, set by CI on push)
-      EVALCTL_HARNESS_VERSION used as a sanity-check signal
+      MERIT_IMAGE_REF       full registry/name:tag (optional)
+      MERIT_IMAGE_DIGEST    sha256:... (optional, set by CI on push)
+      MERIT_HARNESS_VERSION used as a sanity-check signal
     """
-    image = os.getenv("EVALCTL_IMAGE_REF", "")
-    digest = os.getenv("EVALCTL_IMAGE_DIGEST", "")
+    image = os.getenv("MERIT_IMAGE_REF", "")
+    digest = os.getenv("MERIT_IMAGE_DIGEST", "")
     return image, digest
 
 

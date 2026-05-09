@@ -88,8 +88,8 @@ class RunInContainerTest(unittest.TestCase):
         self.assertIn(":/run/config.yaml:ro", joined)
         self.assertIn(":/run/out", joined)
         # Image digest propagated to the container env.
-        self.assertIn("EVALCTL_IMAGE_REF=my-img:tag", argv)
-        self.assertIn("EVALCTL_IMAGE_DIGEST=sha256:deadbeef", argv)
+        self.assertIn("MERIT_IMAGE_REF=my-img:tag", argv)
+        self.assertIn("MERIT_IMAGE_DIGEST=sha256:deadbeef", argv)
         # Extra evalctl args appended.
         self.assertIn("--limit", argv)
         self.assertIn("5", argv)
@@ -112,14 +112,14 @@ class RedactArgvTest(unittest.TestCase):
         self.assertNotIn("sk-leakable", " ".join(out))
 
     def test_non_secret_env_var_passes_through(self) -> None:
-        argv = ["docker", "run", "-e", "EVALCTL_IMAGE_REF=img:tag", "img"]
+        argv = ["docker", "run", "-e", "MERIT_IMAGE_REF=img:tag", "img"]
         out = _redact_argv(argv)
         self.assertEqual(out, argv)
 
     def test_mixed_argv_only_secrets_masked(self) -> None:
         argv = [
             "docker", "run",
-            "-e", "EVALCTL_IMAGE_REF=img:tag",
+            "-e", "MERIT_IMAGE_REF=img:tag",
             "-e", "HF_TOKEN=hf_secret",
             "-v", "/host:/in:ro",
             "-e", "HUGGING_FACE_HUB_TOKEN=hf_other",
@@ -131,7 +131,7 @@ class RedactArgvTest(unittest.TestCase):
         self.assertNotIn("hf_secret", joined)
         self.assertNotIn("hf_other", joined)
         # Non-secrets and structure preserved:
-        self.assertIn("EVALCTL_IMAGE_REF=img:tag", out)
+        self.assertIn("MERIT_IMAGE_REF=img:tag", out)
         self.assertIn("/host:/in:ro", out)
         self.assertEqual(out[-3:], ["img:tag", "evalctl", "run"])
 
