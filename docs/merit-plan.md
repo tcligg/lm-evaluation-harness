@@ -5,7 +5,7 @@
 **Companion to:** [`merit-hld.md`](./merit-hld.md)
 **Status:** Active — Phase 2 complete, Phase 3 next
 **Owner:** tcli
-**Last updated:** 2026-04-24 (rev 2 — system named MERIT)
+**Last updated:** 2026-05-09 (rev 3 — system rename commit logged)
 
 This file tracks **actual** delivery against the phased plan in HLD §15.
 Update on every commit that closes a phase task.
@@ -20,6 +20,7 @@ Update on every commit that closes a phase task.
 | 0 | `evalctl` skeleton, proto IDL, Bazel workspace, manifest | ✅ shipped | 4 commits |
 | 1 | Programmatic dispatch, per-task num_fewshot, repro/diff | ✅ shipped | `0e3ffc8` |
 | 2 | Dockerfile, container dispatch, GitHub Actions CI | ✅ shipped | 3 commits |
+| Rename | System named MERIT; proto/Bazel/image/env-var renames | ✅ shipped | `3f03e2c` |
 | 3 | GCS upload + BQ insert (sinks) | 🔜 next |  |
 | 4 | ADC auth, retire `refresh_token.sh` | ⏳ pending | depends on 3 |
 | 5 | Vertex Custom Job dispatcher | ⏳ pending | depends on 2 (image) + 4 (auth) |
