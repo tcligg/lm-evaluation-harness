@@ -100,22 +100,53 @@ docker-shell:
 
 # Stage the two pre-built fixture runs into /tmp/run/ so `evalctl ls /
 # show / compare` have something to talk about. Idempotent.
-DEMO_RUN_A := 11111111-1111-1111-1111-111111111111
-DEMO_RUN_B := 22222222-2222-2222-2222-222222222222
+#
+# Project / region / endpoint substituted via env vars (defaults shown).
+# Override per-demo:
+#   make demo-seed MERIT_DEMO_PROJECT=my-proj \
+#                  MERIT_DEMO_REGION=us-central1 \
+#                  MERIT_DEMO_ENDPOINT=my-endpoint
+DEMO_RUN_A          := 11111111-1111-1111-1111-111111111111
+DEMO_RUN_B          := 22222222-2222-2222-2222-222222222222
+MERIT_DEMO_PROJECT  ?= cloud-llm-preview1
+MERIT_DEMO_REGION   ?= us-central1
+MERIT_DEMO_ENDPOINT ?= grok-4p20-non-reasoning-h200
+DEMO_DIR            := /tmp/demo
+
+# Substitute @@PROJECT@@ / @@REGION@@ / @@ENDPOINT@@ in any file under
+# the destination tree. Uses sed -i so the source fixtures stay
+# tokenized (committed) and only the staged copies get rendered.
+define render_tokens
+	@find $(1) -type f \( -name '*.json' -o -name '*.yaml' \) -print0 \
+	  | xargs -0 sed -i \
+	      -e 's|@@PROJECT@@|$(MERIT_DEMO_PROJECT)|g' \
+	      -e 's|@@REGION@@|$(MERIT_DEMO_REGION)|g' \
+	      -e 's|@@ENDPOINT@@|$(MERIT_DEMO_ENDPOINT)|g'
+endef
 
 demo-seed:
-	@mkdir -p /tmp/run
-	@rm -rf /tmp/run/$(DEMO_RUN_A) /tmp/run/$(DEMO_RUN_B)
+	@mkdir -p /tmp/run $(DEMO_DIR)
+	@rm -rf /tmp/run/$(DEMO_RUN_A) /tmp/run/$(DEMO_RUN_B) $(DEMO_DIR)/demo_smoke.yaml
 	@cp -r examples/runs/demo_run_a /tmp/run/$(DEMO_RUN_A)
 	@cp -r examples/runs/demo_run_b /tmp/run/$(DEMO_RUN_B)
-	@echo "Seeded:"
+	@cp examples/configs/demo_smoke.template.yaml $(DEMO_DIR)/demo_smoke.yaml
+	$(call render_tokens,/tmp/run/$(DEMO_RUN_A))
+	$(call render_tokens,/tmp/run/$(DEMO_RUN_B))
+	$(call render_tokens,$(DEMO_DIR))
+	@echo "Seeded with:"
+	@echo "  project:  $(MERIT_DEMO_PROJECT)"
+	@echo "  region:   $(MERIT_DEMO_REGION)"
+	@echo "  endpoint: $(MERIT_DEMO_ENDPOINT)"
+	@echo
 	@echo "  /tmp/run/$(DEMO_RUN_A)  (demo_smoke_gpqa, baseline)"
 	@echo "  /tmp/run/$(DEMO_RUN_B)  (demo_smoke_gpqa, drifted)"
+	@echo "  $(DEMO_DIR)/demo_smoke.yaml          (rendered config)"
 	@echo
 	@echo "Try:  evalctl ls"
+	@echo "      evalctl validate $(DEMO_DIR)/demo_smoke.yaml"
 	@echo "      evalctl show $(DEMO_RUN_A)"
 	@echo "      evalctl compare $(DEMO_RUN_A) $(DEMO_RUN_B)"
 
 demo-clean:
-	@rm -rf /tmp/run/$(DEMO_RUN_A) /tmp/run/$(DEMO_RUN_B)
-	@echo "Removed demo fixtures from /tmp/run/"
+	@rm -rf /tmp/run/$(DEMO_RUN_A) /tmp/run/$(DEMO_RUN_B) $(DEMO_DIR)
+	@echo "Removed demo fixtures from /tmp/run/ and $(DEMO_DIR)/"

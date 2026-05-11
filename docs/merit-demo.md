@@ -14,13 +14,49 @@ cd /path/to/lm-evaluation-harness
 make install                # installs evalctl to ~/.local/bin
 rm -rf /tmp/run/*           # optional: clean leftover dev runs so `ls`
                             # shows only the demo fixtures
-make demo-seed              # stages two fixture runs into /tmp/run/
+make demo-seed              # renders fixtures into /tmp/run/ and config
+                            # into /tmp/demo/demo_smoke.yaml
 ```
+
+### Seeding with your own GCP project
+
+The fixtures + config use `@@PROJECT@@`, `@@REGION@@`, `@@ENDPOINT@@`
+tokens. `make demo-seed` substitutes them with these defaults:
+
+| Var | Default |
+|---|---|
+| `MERIT_DEMO_PROJECT`  | `cloud-llm-preview1` |
+| `MERIT_DEMO_REGION`   | `us-central1` |
+| `MERIT_DEMO_ENDPOINT` | `grok-4p20-non-reasoning-h200` |
+
+Override per-demo by passing them on the make command line:
+
+```bash
+make demo-seed \
+  MERIT_DEMO_PROJECT=my-real-project \
+  MERIT_DEMO_REGION=us-east1 \
+  MERIT_DEMO_ENDPOINT=my-real-endpoint
+```
+
+Or export them once for the shell:
+
+```bash
+export MERIT_DEMO_PROJECT=my-real-project
+export MERIT_DEMO_ENDPOINT=my-real-endpoint
+make demo-seed
+```
+
+The substitution rewrites in three places: the two run dirs under
+`/tmp/run/` (so `evalctl show` displays your project), and the rendered
+config at `/tmp/demo/demo_smoke.yaml` (so `evalctl validate` /
+`evalctl run --dry-run` use it).
 
 Verify in a fresh terminal:
 
 ```bash
-evalctl ls                  # should show exactly demo_run_a + demo_run_b
+evalctl ls                                          # should show exactly demo_run_a + demo_run_b
+evalctl validate /tmp/demo/demo_smoke.yaml          # should print OK
+grep endpoint_id /tmp/demo/demo_smoke.yaml          # confirms your project shows
 ```
 
 If `evalctl` isn't on `$PATH`, add `~/.local/bin` to it.
@@ -48,13 +84,13 @@ sed -n '1,40p' docs/merit-hld.md
 Show that a run is fully described by one YAML file:
 
 ```bash
-bat examples/configs/demo_smoke.yaml         # or `cat`, `less`
+bat /tmp/demo/demo_smoke.yaml         # or `cat`, `less`
 ```
 
 Then validate it:
 
 ```bash
-evalctl validate examples/configs/demo_smoke.yaml
+evalctl validate /tmp/demo/demo_smoke.yaml
 ```
 
 Expected output:
@@ -82,7 +118,7 @@ the room (or show both):
 the team has been typing):
 
 ```bash
-evalctl run examples/configs/demo_smoke.yaml --local --dry-run --subprocess
+evalctl run /tmp/demo/demo_smoke.yaml --local --dry-run --subprocess
 ```
 
 Expected: a single `lm_eval ...` argv with `--apply_chat_template`,
@@ -92,7 +128,7 @@ Expected: a single `lm_eval ...` argv with `--apply_chat_template`,
 **Programmatic form** (default; in-process `simple_evaluate` call):
 
 ```bash
-evalctl run examples/configs/demo_smoke.yaml --local --dry-run
+evalctl run /tmp/demo/demo_smoke.yaml --local --dry-run
 ```
 
 Expected: model_args dict, task_groups dict (one group per distinct
@@ -113,7 +149,7 @@ config, and show it round-trips:
 ```bash
 evalctl repro examples/runs/demo_run_a/results_*.json \
   --out /tmp/repro_demo.yaml --name demo_smoke_repro
-diff examples/configs/demo_smoke.yaml /tmp/repro_demo.yaml | head -30
+diff /tmp/demo/demo_smoke.yaml /tmp/repro_demo.yaml | head -30
 ```
 
 > **Talking point:** "Given any historical `results_*.json` you can
@@ -229,9 +265,10 @@ manifest).
 
 **Q: How do I run this against my own endpoint without changing the
 example?**
-A: Three options: (1) `cp examples/configs/demo_smoke.yaml my_cfg.yaml`
-and edit; (2) `evalctl repro` from a previous results.json; (3) once
-Phase 4 lands, just `gcloud auth application-default login` and
+A: Three options: (1) re-seed with overrides — `make demo-seed
+MERIT_DEMO_PROJECT=my-proj MERIT_DEMO_ENDPOINT=my-endpoint`; (2)
+`evalctl repro` from a previous `results.json`; (3) once Phase 4
+lands, just `gcloud auth application-default login` and
 `evalctl run cfg.yaml --local`.
 
 **Q: Where do results go?**

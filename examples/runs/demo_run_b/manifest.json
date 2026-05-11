@@ -17,14 +17,14 @@
   },
   "env_allow_listed": {
     "USER": "tcli",
-    "MERIT_VERTEX_PROJECT": "cloud-llm-preview1",
-    "MERIT_VERTEX_REGION": "us-central1"
+    "MERIT_VERTEX_PROJECT": "@@PROJECT@@",
+    "MERIT_VERTEX_REGION": "@@REGION@@"
   },
   "config_sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
   "endpoint": {
     "type": "vertex_chat",
     "model_id": "google/openmaas-2.0-test",
-    "endpoint_id": "projects/cloud-llm-preview1/locations/us-central1/endpoints/grok-4p20-non-reasoning-h200"
+    "endpoint_id": "projects/@@PROJECT@@/locations/@@REGION@@/endpoints/@@ENDPOINT@@"
   },
   "tags": {
     "audience": "engineering-demo",

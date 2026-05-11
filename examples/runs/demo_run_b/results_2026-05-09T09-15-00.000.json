@@ -23,7 +23,7 @@
   },
   "config": {
     "model": "local-chat-completions",
-    "model_args": "model=google/openmaas-2.0-test,base_url=https://us-central1-staging-aiplatform.sandbox.googleapis.com/v1/projects/cloud-llm-preview1/locations/us-central1/endpoints/grok-4p20-non-reasoning-h200/chat/completions,num_concurrent=8,max_gen_toks=4096,timeout=60",
+    "model_args": "model=google/openmaas-2.0-test,base_url=https://@@BASE_HOST@@/v1/projects/@@PROJECT@@/locations/@@REGION@@/endpoints/@@ENDPOINT@@/chat/completions,num_concurrent=8,max_gen_toks=4096,timeout=60",
     "gen_kwargs": {"until": "<|eos|>"},
     "random_seed": 0,
     "numpy_random_seed": 1234,
