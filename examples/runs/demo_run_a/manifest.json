@@ -1,0 +1,35 @@
+{
+  "run_id": "11111111-1111-1111-1111-111111111111",
+  "schema_version": 1,
+  "name": "demo_smoke_gpqa",
+  "user_id": "tcli",
+  "timestamp_utc": "2026-05-08T17:30:00Z",
+  "execution_mode": "EXECUTION_MODE_LOCAL",
+  "git": {
+    "wrapper_commit": "af21d8d",
+    "wrapper_dirty": false,
+    "harness_version": "0.4.12.dev0",
+    "harness_commit": "af21d8d"
+  },
+  "container": {
+    "image": "local/merit:0.4.12.dev0-af21d8d",
+    "digest": "sha256:c8f013cf395ee3b9432e45d0e0789d95e5dc2ef14bd33446ba0fae2a10584950"
+  },
+  "env_allow_listed": {
+    "USER": "tcli",
+    "MERIT_VERTEX_PROJECT": "cloud-llm-preview1",
+    "MERIT_VERTEX_REGION": "us-central1"
+  },
+  "config_sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+  "endpoint": {
+    "type": "vertex_chat",
+    "model_id": "google/openmaas-2.0-test",
+    "endpoint_id": "projects/cloud-llm-preview1/locations/us-central1/endpoints/grok-4p20-non-reasoning-h200"
+  },
+  "tags": {
+    "audience": "engineering-demo",
+    "owner": "tcli"
+  },
+  "status": "RUN_STATUS_SUCCESS",
+  "vertex_job_id": ""
+}

@@ -1,0 +1,10 @@
+2026-05-09T09:15:00Z [evalctl] resolved config_sha256=12345678... (same as run A)
+2026-05-09T09:15:00Z [evalctl] dispatching programmatic (in-process)
+2026-05-09T09:15:01Z [lm_eval] Selected Tasks: ['gpqa_diamond_generative_n_shot']
+2026-05-09T09:15:01Z [lm_eval] Setting random seed to 0 | numpy 1234 | torch 1234 | fewshot 1234
+2026-05-09T09:15:01Z [lm_eval] Initializing local-chat-completions model
+2026-05-09T09:15:02Z [lm_eval] Building contexts for gpqa_diamond_generative_n_shot on rank 0
+2026-05-09T09:15:03Z [lm_eval] Running generate_until requests
+2026-05-09T09:21:31Z [lm_eval] gpqa_diamond_generative_n_shot exact_match,strict-match=0.3737 (stderr=0.0344)
+2026-05-09T09:21:31Z [evalctl] manifest patched: status=RUN_STATUS_SUCCESS
+2026-05-09T09:21:31Z [evalctl] artifacts in /tmp/run/22222222-2222-2222-2222-222222222222

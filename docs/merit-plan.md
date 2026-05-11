@@ -3,9 +3,10 @@
 **MERIT — Model Evaluation, Reproducibility, and Tracking**
 
 **Companion to:** [`merit-hld.md`](./merit-hld.md)
+**Walkthrough:** [`merit-demo.md`](./merit-demo.md) — 5–7 min engineering demo script
 **Status:** Active — Phase 2 complete, Phase 3 next
 **Owner:** tcli
-**Last updated:** 2026-05-09 (rev 4 — annotation system + parallelization map)
+**Last updated:** 2026-05-11 (rev 5 — demo script added)
 
 This file tracks **actual** delivery against the phased plan in HLD §15.
 Update on every commit that closes a phase task.

@@ -1,8 +1,11 @@
 # evalctl
 
 Developer CLI for MERIT (Model Evaluation, Reproducibility, and Tracking). See `docs/merit-hld.md` for
-the full design and `docs/merit-plan.md` for current implementation
-status (which phases shipped, which are pending, what's blocked).
+the full design, `docs/merit-plan.md` for current implementation status
+(which phases shipped, which are pending, what's blocked), and
+`docs/merit-demo.md` for the 5–7 min engineering walkthrough script.
+
+**Quick demo:** `make install && make demo-seed && evalctl ls`.
 
 ## Status
 

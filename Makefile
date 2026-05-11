@@ -2,7 +2,8 @@
 # Real build/test/run still goes through bazel; these are just aliases.
 
 .PHONY: build test smoke evalctl proto clean dev-install install uninstall fmt \
-        docker-build docker-push docker-run docker-shell
+        docker-build docker-push docker-run docker-shell \
+        demo-seed demo-clean
 
 # Where the launcher script gets symlinked. Override with PREFIX=...
 PREFIX ?= $(HOME)/.local
@@ -94,3 +95,27 @@ docker-run:
 
 docker-shell:
 	docker run --rm -it --entrypoint /bin/bash $(IMAGE_REF)
+
+# ---------- Demo (engineering walkthrough) -----------------------------------
+
+# Stage the two pre-built fixture runs into /tmp/run/ so `evalctl ls /
+# show / compare` have something to talk about. Idempotent.
+DEMO_RUN_A := 11111111-1111-1111-1111-111111111111
+DEMO_RUN_B := 22222222-2222-2222-2222-222222222222
+
+demo-seed:
+	@mkdir -p /tmp/run
+	@rm -rf /tmp/run/$(DEMO_RUN_A) /tmp/run/$(DEMO_RUN_B)
+	@cp -r examples/runs/demo_run_a /tmp/run/$(DEMO_RUN_A)
+	@cp -r examples/runs/demo_run_b /tmp/run/$(DEMO_RUN_B)
+	@echo "Seeded:"
+	@echo "  /tmp/run/$(DEMO_RUN_A)  (demo_smoke_gpqa, baseline)"
+	@echo "  /tmp/run/$(DEMO_RUN_B)  (demo_smoke_gpqa, drifted)"
+	@echo
+	@echo "Try:  evalctl ls"
+	@echo "      evalctl show $(DEMO_RUN_A)"
+	@echo "      evalctl compare $(DEMO_RUN_A) $(DEMO_RUN_B)"
+
+demo-clean:
+	@rm -rf /tmp/run/$(DEMO_RUN_A) /tmp/run/$(DEMO_RUN_B)
+	@echo "Removed demo fixtures from /tmp/run/"

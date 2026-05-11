@@ -6,6 +6,7 @@
 **Owner:** tcli
 **Last updated:** 2026-04-24 (rev 3 — system named MERIT)
 **Implementation status:** see [`merit-plan.md`](./merit-plan.md)
+**Walkthrough:** see [`merit-demo.md`](./merit-demo.md) — 5–7 min engineering demo script
 
 ## 1. Background
 
