@@ -301,6 +301,101 @@ def list_runs(
         typer.echo(summarize(ref))
 
 
+@app.command()
+def config(
+    run_id: str = typer.Argument(..., help="UUID of a previous run."),
+    out: Path | None = typer.Option(
+        None, "--out", "-o",
+        help="Write to this path instead of stdout."),
+    force_repro: bool = typer.Option(
+        False, "--force-repro",
+        help="Always reconstruct from results_*.json even if "
+             "config.resolved.yaml exists. Useful for older runs that "
+             "predate the config.resolved.yaml emission."),
+) -> None:
+    """Extract the config that produced a given run.
+
+    Resolution order:
+      1. config.resolved.yaml in the run's workdir (preferred; written
+         by every run since Phase 2). This is the runner's JSON
+         projection of whatever YAML the user submitted.
+      2. Reconstruct from results_*.json via `evalctl repro` semantics
+         (best-effort; some flags don't round-trip — TODO comments
+         flag fields the user should review).
+
+    Note: the emitted file's sha256 will NOT generally match the
+    manifest's `config_sha256`. The manifest records the sha of the
+    user's *input* YAML; this command emits the *resolved* projection
+    (or a reconstruction). Both produce equivalent runs; only the
+    bytes differ.
+
+    Exit codes:
+      0 - config emitted
+      4 - run_id not found
+      5 - run found but neither config.resolved.yaml nor results_*.json
+          is present (status=running, or partial failure before any
+          artifact was written)
+    """
+    from tools.evalctl.runs import RunNotFound, find_run_by_id
+
+    try:
+        ref = find_run_by_id(run_id)
+    except RunNotFound as e:
+        typer.secho(str(e), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=4)
+
+    yaml_text: str
+    source_note: str
+
+    if ref.config_path and ref.config_path.exists() and not force_repro:
+        # Preferred path: emit the runner-saved config verbatim.
+        yaml_text = ref.config_path.read_text()
+        source_note = f"# Source: {ref.config_path} (runner-saved)\n"
+    elif ref.results and ref.workdir:
+        # Fallback: reconstruct from the harness's results_*.json.
+        from tools.evalctl.repro import reconstruct_config
+        results_files = sorted(ref.workdir.glob("results_*.json"),
+                               key=lambda p: p.stat().st_mtime, reverse=True)
+        if not results_files:
+            typer.secho(
+                f"Run {run_id} has no config.resolved.yaml AND no "
+                f"results_*.json. Cannot extract a config "
+                f"(status={(ref.manifest or {}).get('status', '?')}).",
+                fg=typer.colors.RED, err=True,
+            )
+            raise typer.Exit(code=5)
+        yaml_text = reconstruct_config(results_files[0],
+                                       run_name=(ref.manifest or {}).get(
+                                           "name", "reconstructed_run"))
+        if force_repro and ref.config_path:
+            reason = "--force-repro requested"
+        else:
+            reason = "no config.resolved.yaml on disk"
+        source_note = (
+            f"# Source: reconstructed from {results_files[0].name} "
+            f"({reason})\n"
+        )
+    else:
+        typer.secho(
+            f"Run {run_id} has neither config.resolved.yaml nor "
+            f"results_*.json. Cannot extract a config "
+            f"(status={(ref.manifest or {}).get('status', '?')}).",
+            fg=typer.colors.RED, err=True,
+        )
+        raise typer.Exit(code=5)
+
+    payload = source_note + yaml_text
+
+    if out is None:
+        typer.echo(payload)
+        return
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(payload)
+    typer.secho(f"Wrote {out} ({len(payload.splitlines())} lines)",
+                fg=typer.colors.GREEN)
+
+
 # ---------------------------------------------------------------------------
 # Pretty-printer for `evalctl show`.
 # ---------------------------------------------------------------------------
@@ -364,6 +459,12 @@ def _print_run_summary(ref) -> None:
     typer.secho("artifacts:", bold=True)
     if ref.workdir:
         typer.echo(f"  workdir:  {ref.workdir}")
+    if ref.config_path:
+        typer.echo(f"  config:   {ref.config_path}")
+        typer.echo(f"            (re-emit via: evalctl config {ref.run_id})")
+    elif ref.workdir:
+        typer.echo(f"  config:   <none on disk; reconstruct with: "
+                   f"evalctl config {ref.run_id}>")
     if ref.sample_files:
         typer.echo(f"  samples:  {len(ref.sample_files)} file(s)")
         for p in ref.sample_files[:3]:

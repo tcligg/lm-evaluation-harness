@@ -60,6 +60,25 @@ Phases 0 + 1 + 2 complete.
 - `evalctl ls [-n 20]` — list recent local runs newest-first; useful
   because UUIDs aren't memorable. Override search paths with
   `MERIT_RUN_ROOTS=/path1:/path2`.
+- `evalctl config <run_id> [--out cfg.yaml] [--force-repro]` —
+  extract the config that produced a stored run. Prefers the
+  runner-saved `config.resolved.yaml`; falls back to reconstructing
+  from `results_*.json` for older runs that predate Phase 2.
+
+### "How do I get the config that produced this run?"
+
+Three flavors depending on what you have:
+
+| You have | Run this |
+|---|---|
+| A `run_id` for any stored run | `evalctl config <run_id> -o my.yaml` |
+| A historical `results_*.json` (e.g. from a teammate, gs://, …) | `evalctl repro path/to/results.json -o my.yaml` |
+| A run that's still in progress (`status=running`, no results yet) | `cat /tmp/run/<run_id>/config.resolved.yaml` (always written at submit time) |
+
+After Phase 2, **every** run writes `config.resolved.yaml` next to
+`manifest.json` at submit time, so `evalctl config <run_id>` is
+the canonical retrieval path. The runner-saved file is a JSON-format
+projection of the user's input YAML; both produce equivalent runs.
 
 Not yet implemented (later phases):
 
@@ -133,7 +152,7 @@ There are two test tiers:
 
 | Tier | Command | Deps | Coverage |
 |---|---|---|---|
-| **Smoke** (no proto) | `make smoke` | python, PyYAML | env allow-list, YAML+sha256, enum normalization, lm_eval argv translation, chat-template defaulting, results-roundtrip (Phase 1), programmatic dispatcher with mocked lm_eval, container dispatcher with mocked docker (Phase 2), run_id resolver. 88 unit tests + 2 end-to-end checks. |
+| **Smoke** (no proto) | `make smoke` | python, PyYAML | env allow-list, YAML+sha256, enum normalization, lm_eval argv translation, chat-template defaulting, results-roundtrip (Phase 1), programmatic dispatcher with mocked lm_eval, container dispatcher with mocked docker (Phase 2), run_id resolver, CLI subcommand dispatch via typer.testing.CliRunner. 96 unit tests + 2 end-to-end checks. |
 | **Full** (proto-coupled) | `make test` | bazel, protoc | Adds config_loader_test (proto roundtrip) and manifest_test (proto-typed RunManifest builder). |
 
 Run the smoke tier on any dev laptop without bazel/protoc:
@@ -255,6 +274,8 @@ tools/evalctl/
   programmatic_test.py Proto-free unit tests for programmatic (10 cases).
   container_test.py    Proto-free unit tests for container (12 cases).
   runs_test.py         Proto-free unit tests for runs (13 cases).
+  cli_test.py          CLI subcommand tests via typer.testing.CliRunner
+                       (8 cases; covers `evalctl config` + `show` config hint).
   smoke_test.sh        5-step smoke driver (env, syntax, units, e2e, repro).
 
 docker/

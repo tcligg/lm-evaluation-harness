@@ -108,14 +108,17 @@ endpoint:      google/openmaas-2.0-test
 > character, get a different hash, get a different run."
 
 **Bonus mid-Act 2 (10s):** show that the `config_sha256` you just
-printed matches the one recorded in the demo run's manifest:
+printed matches the one recorded in the demo run's manifest, and
+that you can recover the producing config from any stored run:
 
 ```bash
 grep config_sha256 /tmp/run/11111111-1111-1111-1111-111111111111/manifest.json
+evalctl config 11111111-1111-1111-1111-111111111111 | head -10
 ```
 
-> "Same hash. That's how `evalctl show` proves a run came from this
-> exact config."
+> "Same hash. And `evalctl config <run_id>` extracts the exact YAML
+> the runner saved — every run since Phase 2 keeps a copy. So you
+> never have to ask 'what config did this come from?' again."
 
 ---
 
@@ -288,6 +291,23 @@ lands, just `gcloud auth application-default login` and
 A: Today: `/tmp/run/<run_id>/`. Phase 3: also pushed to
 `gs://merit-artifacts-prod/runs/<run_id>/` and merged into BigQuery
 `merit_results.{merit_runs,merit_metrics,merit_manifest_raw}`.
+
+**Q: I have a stored run. How do I get the config that produced it?**
+A: `evalctl config <run_id> -o my.yaml`. By default it copies the
+runner-saved `config.resolved.yaml` from the run's workdir; if the
+run predates Phase 2 and only has `results_*.json`, it falls back
+to reconstructing via the same logic as `evalctl repro`.
+
+```bash
+# preferred (uses config.resolved.yaml):
+evalctl config 11111111-1111-1111-1111-111111111111 -o /tmp/extracted.yaml
+
+# force reconstruction from results_*.json (for older runs or A/B test):
+evalctl config 11111111-... --force-repro
+
+# print to stdout instead of writing a file:
+evalctl config 11111111-...
+```
 
 **Q: Why "MERIT"?**
 A: Model Evaluation, Reproducibility, and Tracking — the three pillars

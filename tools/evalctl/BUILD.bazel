@@ -106,6 +106,18 @@ py_test(
     deps = [":runs_lib"],
 )
 
+# CLI subcommand tests. Use typer.testing.CliRunner; depends on the
+# full evalctl_lib (proto-coupled) because cli.py imports it lazily.
+# Counts as a proto-coupled test for that reason.
+py_test(
+    name = "cli_test",
+    srcs = ["cli_test.py"],
+    deps = [
+        ":evalctl_lib",
+        requirement("typer"),
+    ],
+)
+
 # Proto-coupled tests. Require py_proto_library to be built.
 py_test(
     name = "config_loader_test",

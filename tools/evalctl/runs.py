@@ -51,6 +51,7 @@ class RunRef:
     gcs_uri: str | None = None      # populated when source == "gcs"
     manifest: dict | None = None
     config: dict | None = None
+    config_path: Path | None = None # config.resolved.yaml on disk, if present
     results: dict | None = None     # parsed results_*.json (latest)
     sample_files: list[Path] = field(default_factory=list)
     log_path: Path | None = None
@@ -91,6 +92,7 @@ def _load_local_run(run_dir: Path, run_id: str) -> RunRef:
 
     config_path = run_dir / "config.resolved.yaml"
     if config_path.exists():
+        ref.config_path = config_path
         try:
             # The runner writes JSON-in-.yaml (proto3 JSON projection).
             ref.config = json.loads(config_path.read_text())
