@@ -107,6 +107,16 @@ endpoint:      google/openmaas-2.0-test
 > the link between this YAML and the run's manifest — change one
 > character, get a different hash, get a different run."
 
+**Bonus mid-Act 2 (10s):** show that the `config_sha256` you just
+printed matches the one recorded in the demo run's manifest:
+
+```bash
+grep config_sha256 /tmp/run/11111111-1111-1111-1111-111111111111/manifest.json
+```
+
+> "Same hash. That's how `evalctl show` proves a run came from this
+> exact config."
+
 ---
 
 ## Act 3 — Live: config → lm_eval invocation  (~90s)
@@ -190,11 +200,14 @@ evalctl show 11111111-1111-1111-1111-111111111111
 ```
 
 Expected: 2 rows from `ls`, then a full summary card with metrics
-and artifact paths.
+and artifact paths. The `config_sha:` line matches what you saw from
+`evalctl validate` in Act 2.
 
 > **Talking point:** "Today the resolver hits the local scratch dir.
 > Phase 3 adds GCS and BigQuery backends behind the same API — the
-> CLI surface won't change."
+> CLI surface won't change. The config_sha256 is what proves this
+> run came from /tmp/demo/demo_smoke.yaml — anyone can re-validate
+> the config and see the same hash."
 
 ---
 

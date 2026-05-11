@@ -133,18 +133,28 @@ demo-seed:
 	$(call render_tokens,/tmp/run/$(DEMO_RUN_A))
 	$(call render_tokens,/tmp/run/$(DEMO_RUN_B))
 	$(call render_tokens,$(DEMO_DIR))
+	@# Recompute config_sha256 in each manifest so it matches the actual
+	@# bytes of the rendered demo config. Without this the manifest's
+	@# sha is stale and a sharp-eyed audience member spots the mismatch
+	@# during 'evalctl show'.
+	@python3 -c "import hashlib, json, pathlib; \
+sha = hashlib.sha256(pathlib.Path('$(DEMO_DIR)/demo_smoke.yaml').read_bytes()).hexdigest(); \
+[(p.write_text(json.dumps({**json.loads(p.read_text()), 'config_sha256': sha}, indent=2) + '\n')) \
+ for p in [pathlib.Path('/tmp/run/$(DEMO_RUN_A)/manifest.json'), \
+           pathlib.Path('/tmp/run/$(DEMO_RUN_B)/manifest.json')]]; \
+print(f'  config_sha256 patched: {sha}')"
 	@echo "Seeded with:"
 	@echo "  project:  $(MERIT_DEMO_PROJECT)"
 	@echo "  region:   $(MERIT_DEMO_REGION)"
 	@echo "  endpoint: $(MERIT_DEMO_ENDPOINT)"
 	@echo
-	@echo "  /tmp/run/$(DEMO_RUN_A)  (demo_smoke_gpqa, baseline)"
-	@echo "  /tmp/run/$(DEMO_RUN_B)  (demo_smoke_gpqa, drifted)"
-	@echo "  $(DEMO_DIR)/demo_smoke.yaml          (rendered config)"
+	@echo "  /tmp/run/$(DEMO_RUN_A)  (demo_smoke_gpqa, baseline) <- produced by /tmp/demo/demo_smoke.yaml"
+	@echo "  /tmp/run/$(DEMO_RUN_B)  (demo_smoke_gpqa, drifted)  <- same config, later snapshot"
+	@echo "  $(DEMO_DIR)/demo_smoke.yaml          (rendered config used by both runs)"
 	@echo
 	@echo "Try:  evalctl ls"
 	@echo "      evalctl validate $(DEMO_DIR)/demo_smoke.yaml"
-	@echo "      evalctl show $(DEMO_RUN_A)"
+	@echo "      evalctl show $(DEMO_RUN_A)   # config_sha256 will match the validate output"
 	@echo "      evalctl compare $(DEMO_RUN_A) $(DEMO_RUN_B)"
 
 demo-clean:
